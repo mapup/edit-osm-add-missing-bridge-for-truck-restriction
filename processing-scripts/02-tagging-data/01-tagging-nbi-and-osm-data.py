@@ -1,4 +1,6 @@
 import csv
+import os
+import subprocess
 import sys
 
 from qgis.analysis import QgsNativeAlgorithms
@@ -71,7 +73,7 @@ def explode_osm_data(vector_layer):
     return exploded
 
 
-def join_by_location(input_layer, join_layer, join_fields):
+def join_by_location(input_layer, join_layer, join_fields, geometric_predicates):
     """
     Join attributes by location
     """
@@ -84,7 +86,8 @@ def join_by_location(input_layer, join_layer, join_fields):
             "JOIN_FIELDS": join_fields,
             "METHOD": 0,
             "OUTPUT": "memory:",
-            "PREDICATE": [0, 1, 3, 4, 6],
+            "PREDICATE": geometric_predicates,  
+            # Predicates - [0, 1, 2, 3, 4, 5, 6] = [‘intersects’, ‘contains’, ‘equals’, ‘touches’, ‘overlaps’, ‘within’, ‘crosses’]
             "PREFIX": "",
         },
     )["OUTPUT"]
@@ -130,9 +133,9 @@ def get_nearby_bridge_ids_from_csv(csv_file_path):
     with open(csv_file_path, mode="r") as file:
         csv_reader = csv.DictReader(file)
         for row in csv_reader:
-            if row["STRUCTURE_NUMBER_008"] != row["STRUCTURE_NUMBER_008_2"]:
-                nearby_bridge_ids.append(row["STRUCTURE_NUMBER_008"])
-                nearby_bridge_ids.append(row["STRUCTURE_NUMBER_008_2"])
+            if row["8 - Structure Number"] != row["8 - Structure Number_2"]:
+                nearby_bridge_ids.append(row["8 - Structure Number"])
+                nearby_bridge_ids.append(row["8 - Structure Number_2"])
     nearby_bridge_ids = list(set(nearby_bridge_ids))
 
     return nearby_bridge_ids
@@ -146,7 +149,7 @@ def get_bridge_ids_from_csv(csv_file_path):
     with open(csv_file_path, mode="r") as file:
         csv_reader = csv.DictReader(file)
         for row in csv_reader:
-            bridge_id = row["STRUCTURE_NUMBER_008"]
+            bridge_id = row["8 - Structure Number"]
             if bridge_id:
                 bridge_ids.append(bridge_id)
     return bridge_ids
@@ -166,7 +169,7 @@ def filter_nbi_layer(vector_layer, exclusion_ids):
 
     # Iterate through the features and filter them
     for feature in vector_layer.getFeatures():
-        if feature["STRUCTURE_NUMBER_008"] not in exclusion_ids:
+        if feature["8 - Structure Number"] not in exclusion_ids:
             provider.addFeature(feature)
 
     return filtered_layer
@@ -227,8 +230,9 @@ def process_bridge(nbi_points_gl, exploded_osm_gl):
         buffer_80,
         nbi_points_gl,
         [
-            "STRUCTURE_NUMBER_008",
+            "8 - Structure Number",
         ],
+        geometric_predicates=[0, 1],
     )
 
     join_csv_path = "output-data/csv-files/OSM-Bridge-Yes-NBI-Join.csv"
@@ -268,8 +272,9 @@ def process_layer_tag(nbi_points_gl, exploded_osm_gl):
         buffer_30,
         nbi_points_gl,
         [
-            "STRUCTURE_NUMBER_008",
+            "8 - Structure Number",
         ],
+        geometric_predicates=[0, 1],
     )
 
     join_csv_path = (
@@ -313,16 +318,18 @@ def process_parallel_bridges(nbi_points_gl, exploded_osm_gl):
         [
             "osm_id",
         ],
+        geometric_predicates=[0],
     )
 
     osm_oneway_yes_osm_bridge_join = join_by_location(
         osm_oneway_yes_osm_join,
         nbi_points_gl,
-        ["STRUCTURE_NUMBER_008"],
+        ["8 - Structure Number"],
+        geometric_predicates=[0, 1],
     )
 
     join_csv_path = "output-data/csv-files/OSM-Oneways-NBI-Join.csv"
-    keep_fields = ["osm_id", "osm_id_2", "STRUCTURE_NUMBER_008"]
+    keep_fields = ["osm_id", "osm_id_2", "8 - Structure Number"]
     vl_to_csv_filter(osm_oneway_yes_osm_bridge_join, join_csv_path, keep_fields)
 
     parallel_bridge_ids = get_bridge_ids_from_csv(join_csv_path)
@@ -356,12 +363,13 @@ def process_nearby_bridges(nbi_points_gl):
         buffer_10,
         nbi_points_gl,
         [
-            "STRUCTURE_NUMBER_008",
+            "8 - Structure Number",
         ],
+        geometric_predicates=[0, 1],
     )
 
     join_csv_path = "output-data/csv-files/NBI-10-NBI-Join.csv"
-    keep_fields = ["STRUCTURE_NUMBER_008", "STRUCTURE_NUMBER_008_2"]
+    keep_fields = ["8 - Structure Number", "8 - Structure Number_2"]
     vl_to_csv_filter(nbi_10_nbi_join, join_csv_path, keep_fields)
 
     nearby_bridge_ids = get_nearby_bridge_ids_from_csv(join_csv_path)
@@ -369,7 +377,7 @@ def process_nearby_bridges(nbi_points_gl):
         vector_layer=nbi_points_gl, exclusion_ids=nearby_bridge_ids
     )
 
-    output_path = "output-data/gpkg-files/Final-filtered-NBI-Bridges.gpkg"
+    output_path = "output-data/gpkg-files/Nearby-filtered-NBI-Bridges.gpkg"
     QgsVectorFileWriter.writeAsVectorFormat(
         filtered_layer, output_path, "utf-8", filtered_layer.crs(), "GPKG"
     )
@@ -378,6 +386,101 @@ def process_nearby_bridges(nbi_points_gl):
 
     QgsProject.instance().removeMapLayer(buffer_10.id())
     QgsProject.instance().removeMapLayer(nbi_10_nbi_join.id())
+
+    return filtered_layer
+
+
+def process_culverts_from_pbf(nbi_points_gl, osm_pbf_path):
+    """
+    Process and filter out tunnels marked as culverts from a local OSM PBF file.
+    Return a layer with filtered out items.
+    """
+    # Define file paths
+    base_name = os.path.splitext(os.path.basename(osm_pbf_path))[0].replace(".osm", "")
+    culverts_pbf_path = f"output-data/pbf-files/{base_name}-culverts.osm.pbf"
+    culverts_geojson_path = f"output-data/gpkg-files/{base_name}-culverts.geojson"
+    culverts_gpkg_path = f"output-data/gpkg-files/{base_name}-culverts.gpkg"
+
+    # Step 1: Filter OSM data for tunnels marked as culverts
+    filter_command = [
+        "osmium",
+        "tags-filter",
+        osm_pbf_path,
+        "w/tunnel=culvert",
+        "-o",
+        culverts_pbf_path,
+    ]
+    subprocess.run(filter_command, check=True)
+
+    # Step 2: Convert the filtered data to GeoJSON
+    export_command = [
+        "osmium",
+        "export",
+        "-f",
+        "geojson",
+        "-o",
+        culverts_geojson_path,
+        culverts_pbf_path,
+    ]
+    subprocess.run(export_command, check=True)
+
+    # Step 3: Convert the GeoJSON to GeoPackage
+    convert_command = [
+        "ogr2ogr",
+        "-f",
+        "GPKG",
+        culverts_gpkg_path,
+        culverts_geojson_path,
+    ]
+    subprocess.run(convert_command, check=True)
+
+    # Remove intermediate files
+    os.remove(culverts_pbf_path)
+    os.remove(culverts_geojson_path)
+
+    # Load the GeoPackage layer
+    osm_fp = "output-data/gpkg-files/kentucky-latest-culverts.gpkg|layername=kentucky-latest-culverts|geometrytype=LineString"
+    osm_layer = QgsVectorLayer(osm_fp, "osm-culverts", "ogr")
+    if not osm_layer.isValid():
+        raise Exception(f"Failed to load layer from {culverts_gpkg_path}")
+
+    # Create a 30m buffer (0.0003 degrees)
+    buffer_30 = create_buffer(osm_layer, 0.0003)
+
+    # Join filtered OSM data with NBI points based on location
+    osm_culvert_nbi_join = join_by_location(
+        buffer_30,
+        nbi_points_gl,
+        [
+            "8 - Structure Number",
+        ],
+        geometric_predicates=[0],
+    )
+
+    # Save the joined layer to a CSV file
+    join_csv_path = "output-data/csv-files/OSM-Culvert-NBI-Join.csv"
+
+    vl_to_csv(osm_culvert_nbi_join, join_csv_path)
+
+    # Get exclusion IDs from the CSV file
+    exclusion_ids = get_bridge_ids_from_csv(join_csv_path)
+
+    # Filter the NBI layer using the exclusion IDs
+    filtered_layer = filter_nbi_layer(nbi_points_gl, exclusion_ids)
+
+    # Output path for the filtered layer
+    output_path = "output-data/gpkg-files/Final-filtered-NBI-Bridges.gpkg"
+
+    QgsVectorFileWriter.writeAsVectorFormat(
+        filtered_layer, output_path, "utf-8", filtered_layer.crs(), "GPKG"
+    )
+
+    print(f"\nOutput file: {output_path} has been created successfully!")
+
+    # Remove temporary layers from the project
+    QgsProject.instance().removeMapLayer(osm_layer.id())
+    QgsProject.instance().removeMapLayer(buffer_30.id())
+    QgsProject.instance().removeMapLayer(osm_culvert_nbi_join.id())
 
     return filtered_layer
 
@@ -393,7 +496,7 @@ def process_buffer_join(nbi_points_gl, osm_gl, exploded_osm_gl):
     if not rivers_gl.isValid():
         print("Rivers layer failed to load!")
         sys.exit(1)
-        
+
     filter_expression = "highway not in ('abandoned','bridleway','construction','corridor','crossing','cycleway','elevator','escape','footway','living_street','path','pedestrian','planned','proposed','raceway','rest_area','steps') AND bridge IS NULL AND layer IS NULL"
     exploded_osm_gl = filter_osm_data(exploded_osm_gl, filter_expression)
 
@@ -416,6 +519,7 @@ def process_buffer_join(nbi_points_gl, osm_gl, exploded_osm_gl):
             "gnis_name",
             "fcode_description",
         ],
+        geometric_predicates=[0],
     )
 
     output_path = "output-data/csv-files/OSM-NHD-Join.csv"
@@ -438,10 +542,11 @@ def process_buffer_join(nbi_points_gl, osm_gl, exploded_osm_gl):
             "gnis_name",
             "fcode_description",
         ],
+        geometric_predicates=[0],
     )
 
     keep_fields = [
-        "STRUCTURE_NUMBER_008",
+        "8 - Structure Number",
         "permanent_identifier",
     ]
 
@@ -455,17 +560,14 @@ def process_buffer_join(nbi_points_gl, osm_gl, exploded_osm_gl):
     print(f"\nOutput file: {output_path} has been created successfully!")
 
     nbi_30_osm_river_join = join_by_location(
-        buffer_30,
-        osm_river_join,
-        [],
+        buffer_30, osm_river_join, [], geometric_predicates=[0]
     )
 
     keep_fields = [
-        "OBJECTID",
-        "STATE_CODE_001",
-        "STRUCTURE_NUMBER_008",
-        "LATDD",
-        "LONGDD",
+        "1 - State Code",
+        "8 - Structure Number",
+        "16 - Latitude (decimal)",
+        "17 - Longitude (decimal)",
         "osm_id",
         "name",
         "highway",
@@ -485,13 +587,18 @@ def process_buffer_join(nbi_points_gl, osm_gl, exploded_osm_gl):
 def main():
     nbi_points_fp = "output-data/gpkg-files/NBI-Kentucky-Bridge-Data.gpkg|layername=NBI-Kentucky-Bridge-Data"
     osm_fp = "output-data/gpkg-files/kentucky-filtered-highways.gpkg|layername=lines"
+    osm_pbf_path = "input-data/kentucky-latest.osm.pbf"
+
     nbi_points_gl, osm_gl = load_layers(nbi_points_fp, osm_fp)
     exploded_osm_gl = explode_osm_data(osm_gl)
+
     output_layer1 = process_bridge(nbi_points_gl, exploded_osm_gl)
     output_layer2 = process_layer_tag(output_layer1, exploded_osm_gl)
     output_layer3 = process_parallel_bridges(output_layer2, exploded_osm_gl)
     output_layer4 = process_nearby_bridges(output_layer3)
-    process_buffer_join(output_layer4, osm_gl, exploded_osm_gl)
+    output_layer5 = process_culverts_from_pbf(output_layer4, osm_pbf_path)
+
+    process_buffer_join(output_layer5, osm_gl, exploded_osm_gl)
 
 
 if __name__ == "__main__":

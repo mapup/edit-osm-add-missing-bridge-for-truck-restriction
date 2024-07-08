@@ -30,7 +30,7 @@ right_ddf = dd.read_csv(
 )
 
 # Perform a left join on the 'bridge_id' column
-result_ddf = left_ddf.merge(right_ddf, on="STRUCTURE_NUMBER_008", how="left")
+result_ddf = left_ddf.merge(right_ddf, on="8 - Structure Number", how="left")
 
 # Save the result to a directory with multiple part files
 result_ddf.to_csv(
