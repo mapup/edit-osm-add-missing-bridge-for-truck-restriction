@@ -33,9 +33,17 @@ def calculate_cross_similarity_2(row):
 
 # Apply the function row-wise
 df["osm_similarity"] = df.apply(calculate_osm_similarity, axis=1)
-df["nhd_similrity"] = df.apply(calculate_nhd_similarity, axis=1)
-df["osm_with_features_intersected"] = df.apply(calculate_cross_similarity_1, axis=1)
-df["nhd_with_facility_carried"] = df.apply(calculate_cross_similarity_2, axis=1)
+df["nhd_similarity"] = df.apply(calculate_nhd_similarity, axis=1)
+
+df["similarity_type"] = pd.np.where(
+    df["final_osm_id"].isnull(),
+    "Not to be edited",
+    pd.np.where(
+        (df["osm_similarity"] > 50) | (df["nhd_similarity"] > 50),
+        "Automated edit",
+        "MapRoulette review required",
+    ),
+)
 
 # Save the DataFrame with similarity scores
 df.to_csv(

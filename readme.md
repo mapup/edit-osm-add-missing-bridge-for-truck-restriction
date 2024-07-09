@@ -53,13 +53,13 @@ Within the [03-associating-data](processing-scripts/03-associating-data) folder 
    - [02-determine-final-osm-id.py](processing-scripts/03-associating-data/02-determine-final-osm-id.py): Determining the final OSM ways to be associated with the NBI bridges based on certain conditions along with bridge length and other information.
       - **Output:** [bridge-osm-association-with-lengths.csv](https://drive.google.com/file/d/1HQ02VVRiDbm2_tZbYaRAs3n6UPD9XekV/view?usp=sharing)
    - [03-get-point-projections-on-ways.py](processing-scripts/03-associating-data/03-get-point-projections-on-ways.py): Get the final coordinates of NBI bridges projected on associated OSM ways.
-      - **Output:** [bridge-osm-association-with-projected-points.csv](https://drive.google.com/file/d/10RWb9pSO7sv4NceE-EhDMJC7xhlqPMjw/view?usp=sharing)
+      - **Output:** [bridge-osm-association-with-projected-points.csv](https://drive.google.com/file/d/19ArmfjVVawplu0SluZkh8wTzNCfYDKiy/view?usp=sharing)
    - [04-calculate-match-percentage.py](processing-scripts/03-associating-data/04-calculate-match-percentage.py): Calculate match percentage among the "6A - Features Intersected" column from NBI and Stream name from NHD. Also, calculate the metch among "7 - Facility Carried By Structure" column from NBI and OSM way road name.
      - **Output:** [Association-match-check-with-percentage.csv](https://drive.google.com/file/d/19ArmfjVVawplu0SluZkh8wTzNCfYDKiy/view?usp=sharing)
 4. **Obtain Bridge Coordinates on OSM Ways:**
 Within the [04-obtaining-bridge-coordinates](processing-scripts/04-obtaining-bridge-coordinates) folder of the [processing-scripts](processing-scripts) folder, we have the following script:
    - [01-obtain-bridge-split-info.py](processing-scripts/04-obtaining-bridge-coordinates/01-obtain-bridge-split-info.py): Utilizing the Python script to identify and position bridge coordinates equidistant from the midpoint along specified OSM ways.
-   - **Output:** [bridge-osm-association-with-split-coords.csv](https://drive.google.com/file/d/1ezFl-A6DqD4j96rHmvv8XqzbWZWAUHpa/view?usp=sharing)
+   - **Output:** [bridge-osm-association-with-split-coords.csv](https://drive.google.com/file/d/1ahrMZpunlaZPi8TiY-rEQ8_eKzD0JIov/view?usp=sharing)
 5. **Use JOSM to Add Bridge Tags:**
 Within the [05-split-ways-add-bridge-tag](processing-scripts/05-split-ways-add-bridge-tag) folder of the [processing-scripts](processing-scripts) folder, we have the following three scripts:
    - Add Tags to Bridge Spanning over Single OSM Way:

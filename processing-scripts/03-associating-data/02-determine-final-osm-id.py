@@ -56,8 +56,12 @@ def determine_final_osm_id(group):
         # If there is only one unique OSM id
         osm_id = group["osm_id"].iloc[0]
         osm_name = group["name"].iloc[0]
-        stream_id = group["permanent_identifier_x"].iloc[0]
-        stream_name = group["gnis_name"].iloc[0]
+        if len(min_dist) == 0:
+            stream_id = pd.NA
+            stream_name = pd.NA
+        else:
+            stream_id = min_dist["permanent_identifier_x"].iloc[0]
+            stream_name = min_dist["gnis_name"].iloc[0]
 
         if len(true_stream) == 1:
             long, lat = true_stream[["Long_intersection", "Lat_intersection"]].iloc[0]
@@ -231,9 +235,7 @@ def create_final_associations(df):
         "output-data/csv-files/Associations-with-intersections.csv",
         index=False,
     )
-    print(
-        "\nAssociations-with-intersections.csv file has been created successfully!"
-    )
+    print("\nAssociations-with-intersections.csv file has been created successfully!")
 
     return df
 
