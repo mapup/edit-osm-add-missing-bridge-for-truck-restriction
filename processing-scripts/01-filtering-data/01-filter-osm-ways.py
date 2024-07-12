@@ -19,7 +19,7 @@ def convert_to_geopackage(input_file, output_file):
 
 
 # Path to the input OSM PBF file
-input_osm_pbf = "input-data/Kentucky-Latest.osm.pbf"
+input_osm_pbf = "input-data/kentucky-latest.osm.pbf"
 
 # Make the required directories for storing outputs
 os.makedirs("output-data/csv-files", exist_ok=True)
