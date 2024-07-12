@@ -234,14 +234,14 @@ def main():
     try:
         # Load the GeoJSON file
         geojson_file_path = (
-            "kentucky-filtered-highways.geojson"
+            "/Users/tanishqsharma/Downloads/kentucky-filtered-highways (1).geojson"
         )
         geojson_data = load_geojson(geojson_file_path)
         print("Reading OSM data completed......!")
 
         # Load the CSV file containing bridge data
         csv_file_path = (
-            "bridge-osm-association-with-projected-points.csv"
+            "/Users/tanishqsharma/Downloads/bridge-osm-association-with-lengths (1).csv"
         )
         bridge_data = load_csv(csv_file_path)
         print("Reading bridge data completed......!")
