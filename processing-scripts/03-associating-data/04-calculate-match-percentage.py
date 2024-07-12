@@ -1,9 +1,6 @@
 import pandas as pd
 from fuzzywuzzy import fuzz
 
-# Assuming your CSV data is loaded into a DataFrame `df`
-# df = pd.read_csv('your_file.csv')
-
 
 df = pd.read_csv(
     "output-data/csv-files/bridge-osm-association-with-projected-points.csv"
@@ -39,7 +36,7 @@ df["similarity_type"] = pd.np.where(
     df["final_osm_id"].isnull(),
     "Not to be edited",
     pd.np.where(
-        (df["osm_similarity"] > 50) | (df["nhd_similarity"] > 50),
+        (df["osm_similarity"] > 85) | (df["nhd_similarity"] > 85),
         "Automated edit",
         "MapRoulette review required",
     ),

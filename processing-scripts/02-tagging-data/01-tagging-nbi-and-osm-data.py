@@ -357,10 +357,10 @@ def process_nearby_bridges(nbi_points_gl):
     """
     Process nearby bridges: identify and filter nearby bridges
     """
-    buffer_10 = create_buffer(nbi_points_gl, 0.0001)
+    buffer_30 = create_buffer(nbi_points_gl, 0.0003)
 
-    nbi_10_nbi_join = join_by_location(
-        buffer_10,
+    nbi_30_nbi_join = join_by_location(
+        buffer_30,
         nbi_points_gl,
         [
             "8 - Structure Number",
@@ -368,9 +368,9 @@ def process_nearby_bridges(nbi_points_gl):
         geometric_predicates=[0, 1],
     )
 
-    join_csv_path = "output-data/csv-files/NBI-10-NBI-Join.csv"
+    join_csv_path = "output-data/csv-files/NBI-30-NBI-Join.csv"
     keep_fields = ["8 - Structure Number", "8 - Structure Number_2"]
-    vl_to_csv_filter(nbi_10_nbi_join, join_csv_path, keep_fields)
+    vl_to_csv_filter(nbi_30_nbi_join, join_csv_path, keep_fields)
 
     nearby_bridge_ids = get_nearby_bridge_ids_from_csv(join_csv_path)
     filtered_layer = filter_nbi_layer(
@@ -384,8 +384,8 @@ def process_nearby_bridges(nbi_points_gl):
 
     print(f"\nOutput file: {output_path} has been created successfully!")
 
-    QgsProject.instance().removeMapLayer(buffer_10.id())
-    QgsProject.instance().removeMapLayer(nbi_10_nbi_join.id())
+    QgsProject.instance().removeMapLayer(buffer_30.id())
+    QgsProject.instance().removeMapLayer(nbi_30_nbi_join.id())
 
     return filtered_layer
 

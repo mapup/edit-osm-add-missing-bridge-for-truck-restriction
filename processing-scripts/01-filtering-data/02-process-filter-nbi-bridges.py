@@ -10,9 +10,13 @@ def exclude_duplicate_bridges(df, output_duplicate_exclude_csv):
     Function to exclude duplicate bridges, remove non-posted culverts and save the result to a CSV
     """
 
+    # Drop duplicate bridges based on coordinates
     df.drop_duplicates(
         subset=["16 - Latitude (decimal)", "17 - Longitude (decimal)"], inplace=True
     )
+
+    # Drop duplicate bridges based on Bridge ID
+    df = df[~df['8 - Structure Number'].str.contains('*', regex=False)]
 
     # Remove culverts which are not posted
     df = df[
