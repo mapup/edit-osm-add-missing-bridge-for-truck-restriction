@@ -11,6 +11,7 @@ const Geometry = Java.type("org.openstreetmap.josm.tools.Geometry");
 const ProjectionRegistry = Java.type("org.openstreetmap.josm.data.projection.ProjectionRegistry");
 const UndoRedoHandler = Java.type("org.openstreetmap.josm.data.UndoRedoHandler");
 const OsmPrimitiveType = Java.type("org.openstreetmap.josm.data.osm.OsmPrimitiveType");
+const ChangePropertyCommand = Java.type("org.openstreetmap.josm.command.ChangePropertyCommand");
 
 console.clear();
 
@@ -22,10 +23,10 @@ const BRIDGE_VALUE = "yes";
 const coordinatesList = [
   {
     points: [
-      { latitude: 37.9340811, longitude: -87.5476108, wayId: 17561921 },
-      { latitude: 37.9363173, longitude: -87.5462384, wayId: 97759371 },
+      { latitude: 36.6490109994807, longitude: -89.06306871832646, wayId: 16208279 },
+      { latitude: 36.649008842327014, longitude: -89.06324527869246, wayId: 16208919 },
     ],
-    additionalBridgeWayIds: [17563421]
+    additionalBridgeWayIds: []
   }
 ];
 
@@ -81,16 +82,16 @@ function addNodeToWay(way, latLon, isFirstPoint, preExistingNodeId) {
       let isBridgeWay = false;
 
       if (isFirstPoint) {
-        isBridgeWay = selectedWayNodes.get(0).getId() === closestNode.getId() &&
-                      selectedWayNodes.get(selectedWayNodes.size() - 1).getId() === preExistingNodeId;
+        isBridgeWay = (selectedWayNodes.get(0).getId() === closestNode.getId() && selectedWayNodes.get(selectedWayNodes.size() - 1).getId() === preExistingNodeId) ||
+                      (selectedWayNodes.get(selectedWayNodes.size() - 1).getId() === closestNode.getId() && selectedWayNodes.get(0).getId() === preExistingNodeId);
       } else {
-        isBridgeWay = selectedWayNodes.get(0).getId() === preExistingNodeId &&
-                      selectedWayNodes.get(selectedWayNodes.size() - 1).getId() === closestNode.getId();
+        isBridgeWay = (selectedWayNodes.get(0).getId() === preExistingNodeId && selectedWayNodes.get(selectedWayNodes.size() - 1).getId() === closestNode.getId()) ||
+                      (selectedWayNodes.get(selectedWayNodes.size() - 1).getId() === preExistingNodeId && selectedWayNodes.get(0).getId() === closestNode.getId());
       }
 
       if (isBridgeWay) {
-        selectedWay.put(BRIDGE_TAG, BRIDGE_VALUE);
-        UndoRedoHandler.getInstance().add(new ChangeCommand(selectedWay, selectedWay));
+        const addTagCommand = new ChangePropertyCommand(selectedWay, BRIDGE_TAG, BRIDGE_VALUE);
+        UndoRedoHandler.getInstance().add(addTagCommand);
         console.println(`Bridge way ${selectedWay.getId()} tagged successfully.`);
         break;
       }
@@ -108,8 +109,8 @@ function tagAdditionalBridgeWays(additionalBridgeWayIds) {
   for (const wayId of additionalBridgeWayIds) {
     const way = dataSet.getPrimitiveById(wayId, OsmPrimitiveType.WAY);
     if (way) {
-      way.put(BRIDGE_TAG, BRIDGE_VALUE);
-      UndoRedoHandler.getInstance().add(new ChangeCommand(way, way));
+      const addTagCommand = new ChangePropertyCommand(way, BRIDGE_TAG, BRIDGE_VALUE);
+      UndoRedoHandler.getInstance().add(addTagCommand);
       console.println(`Additional bridge way ${wayId} tagged successfully.`);
     } else {
       console.println(`Additional bridge way ${wayId} not found.`);
@@ -126,24 +127,59 @@ function processCoordinateSet(coordinateSet) {
 
   const { points, additionalBridgeWayIds } = coordinateSet;
 
-  for (let i = 0; i < points.length - 1; i++) {
-    const currentPoint = points[i];
-    const nextPoint = points[i + 1];
+  const currentPoint = points[0];
+  const nextPoint = points[1];
 
-    const currentWay = dataSet.getPrimitiveById(currentPoint.wayId, OsmPrimitiveType.WAY);
-    const nextWay = dataSet.getPrimitiveById(nextPoint.wayId, OsmPrimitiveType.WAY);
+  const currentWay = dataSet.getPrimitiveById(currentPoint.wayId, OsmPrimitiveType.WAY);
+  const nextWay = dataSet.getPrimitiveById(nextPoint.wayId, OsmPrimitiveType.WAY);
 
-    if (!currentWay || !nextWay) {
-      console.println(`Way not found for point ${i} or ${i + 1}`);
-      continue;
+  if (!currentWay || !nextWay) {
+    console.println(`Way not found for point 0 or 1`);
+    return;
+  }
+
+  if (additionalBridgeWayIds.length === 0) {
+    // Find common node between the two ways
+    let commonNode = null;
+    const currentWayNodes = currentWay.getNodes();
+    const nextWayNodes = nextWay.getNodes();
+
+    if (currentWayNodes.get(0).getId() === nextWayNodes.get(0).getId() || currentWayNodes.get(0).getId() === nextWayNodes.get(nextWayNodes.size() - 1).getId()) {
+      commonNode = currentWayNodes.get(0);
+    } else if (currentWayNodes.get(currentWayNodes.size() - 1).getId() === nextWayNodes.get(0).getId() || currentWayNodes.get(currentWayNodes.size() - 1).getId() === nextWayNodes.get(nextWayNodes.size() - 1).getId()) {
+      commonNode = currentWayNodes.get(currentWayNodes.size() - 1);
     }
 
-    const isFirstPoint = i === 0;
-    const currentNode = addNodeToWay(currentWay, new LatLon(currentPoint.latitude, currentPoint.longitude), isFirstPoint, currentWay.getNodes().get(currentWay.getNodes().size() - 1).getId());
+    addNodeToWay(currentWay, new LatLon(currentPoint.latitude, currentPoint.longitude), true, commonNode.getId());
+    addNodeToWay(nextWay, new LatLon(nextPoint.latitude, nextPoint.longitude), false, commonNode.getId());
+  } else {
+    // Find common node for current way and additional bridge way
+    let commonNode = null;
+    const currentWayNodes = currentWay.getNodes();
+    const additionalBridgeWay = dataSet.getPrimitiveById(additionalBridgeWayIds[0], OsmPrimitiveType.WAY);
+    const additionalBridgeWayNodes = additionalBridgeWay.getNodes();
+
+    if (currentWayNodes.get(0).getId() === additionalBridgeWayNodes.get(0).getId() || currentWayNodes.get(0).getId() === additionalBridgeWayNodes.get(additionalBridgeWayNodes.size() - 1).getId()) {
+      commonNode = currentWayNodes.get(0);
+    } else if (currentWayNodes.get(currentWayNodes.size() - 1).getId() === additionalBridgeWayNodes.get(0).getId() || currentWayNodes.get(currentWayNodes.size() - 1).getId() === additionalBridgeWayNodes.get(additionalBridgeWayNodes.size() - 1).getId()) {
+      commonNode = currentWayNodes.get(currentWayNodes.size() - 1);
+    }
     
-    if (i === points.length - 2) {
-      addNodeToWay(nextWay, new LatLon(nextPoint.latitude, nextPoint.longitude), false, nextWay.getNodes().get(0).getId());
+    addNodeToWay(currentWay, new LatLon(currentPoint.latitude, currentPoint.longitude), true, commonNode.getId());
+
+    // Find common node for next way and additional bridge way
+    commonNode = null;
+    const nextWayNodes = nextWay.getNodes();
+    const lastAdditionalBridgeWay = dataSet.getPrimitiveById(additionalBridgeWayIds[additionalBridgeWayIds.length - 1], OsmPrimitiveType.WAY);
+    const lastAdditionalBridgeWayNodes = lastAdditionalBridgeWay.getNodes();
+
+    if (nextWayNodes.get(0).getId() === lastAdditionalBridgeWayNodes.get(0).getId() || nextWayNodes.get(0).getId() === lastAdditionalBridgeWayNodes.get(lastAdditionalBridgeWayNodes.size() - 1).getId()) {
+      commonNode = nextWayNodes.get(0);
+    } else if (nextWayNodes.get(nextWayNodes.size() - 1).getId() === lastAdditionalBridgeWayNodes.get(0).getId() || nextWayNodes.get(nextWayNodes.size() - 1).getId() === lastAdditionalBridgeWayNodes.get(lastAdditionalBridgeWayNodes.size() - 1).getId()) {
+      commonNode = nextWayNodes.get(nextWayNodes.size() - 1);
     }
+
+    addNodeToWay(nextWay, new LatLon(nextPoint.latitude, nextPoint.longitude), false, commonNode.getId());
   }
 
   tagAdditionalBridgeWays(additionalBridgeWayIds);
