@@ -28,12 +28,9 @@ def load_csv(file_path):
         reader = csv.DictReader(f)
         for row_number, row in enumerate(reader, start=1):
             osm_id = row["final_osm_id"]
-            bridge_id = row["8 - Structure Number"]
+            bridge_id = row["STRUCTURE_NUMBER_008"]
             bridge_length = float(row["bridge_length"])
-            bridge_coordinate = (
-                float(row["projected_long"]),
-                float(row["projected_lat"]),
-            )
+            bridge_coordinate = (float(row["final_lat"]), float(row["final_long"]))
             bridge_data.append(
                 {
                     "index": row_number,
@@ -59,10 +56,11 @@ def find_way_id_for_point(point, all_lines_with_ids):
 
 
 def calculate_points_on_way(line, nearest_point, half_distance, all_lines_with_ids):
+    forward_visted = set()
+    backward_visited = set()
     nearest_distance = line.project(nearest_point)
     forward_distance = nearest_distance + half_distance
     backward_distance = nearest_distance - half_distance
-
     forward_point = (
         line.interpolate(forward_distance) if forward_distance <= line.length else None
     )
@@ -74,20 +72,20 @@ def calculate_points_on_way(line, nearest_point, half_distance, all_lines_with_i
     backward_way_id = None
 
     if forward_point is None:
-        forward_point, forward_way_id = extend_along_connected_way(
+        forward_point, forward_way_id, forward_visted = extend_along_connected_way(
             line, forward_distance - line.length, all_lines_with_ids
         )
     else:
         forward_way_id = find_way_id_for_point(forward_point, all_lines_with_ids)
 
     if backward_point is None:
-        backward_point, backward_way_id = extend_along_connected_way(
+        backward_point, backward_way_id, backward_visited = extend_along_connected_way(
             line, -backward_distance, all_lines_with_ids, reverse=True
         )
     else:
         backward_way_id = find_way_id_for_point(backward_point, all_lines_with_ids)
 
-    return forward_point, forward_way_id, backward_point, backward_way_id
+    return forward_point, forward_way_id, forward_visted, backward_point, backward_way_id, backward_visited
 
 
 def extend_along_connected_way(
@@ -97,78 +95,71 @@ def extend_along_connected_way(
         visited = set()
 
     start_or_end = 0 if reverse else -1
-    print("start_or_end", start_or_end)
     connection_point = Point(current_line.coords[start_or_end])
     current_line_way_id = None
     possible_next_lines = []
-
     for line, way_id in all_lines_with_ids:
         if line.equals(current_line):
-            print("visited", visited)
             current_line_way_id = way_id
-            print("current_line_way_id", current_line_way_id)
             continue
         if way_id in visited:
             continue
-        if connection_point.equals(Point(line.coords[0])) or connection_point.equals(
-            Point(line.coords[-1])
-        ):
+        if connection_point.equals(Point(line.coords[0])):
             possible_next_lines.append((line, way_id))
+        elif connection_point.equals(Point(line.coords[-1])):
+            inverted_line = LineString(line.coords[::-1])
+            possible_next_lines.append((inverted_line, way_id))
 
     if len(possible_next_lines) > 1:
-        print(f"Split detected at point {connection_point}. Stopping.")
-        # find the way_id of the current line
-        print("returning1", current_line_way_id)
-        return None, current_line_way_id
+        print(f"Split detected at point {current_line_way_id}. Stopping.")
+        #find the way_id of the current line
+        return None, current_line_way_id, visited
 
     if len(possible_next_lines) == 1:
         next_line, way_id = possible_next_lines[0]
         if remaining_distance <= next_line.length:
             next_point = next_line.interpolate(remaining_distance)
-            print("returning2", way_id)
-            return next_point, way_id
+            return next_point, way_id, visited
         else:
             visited.add(way_id)
-            return_point, return_wayid = extend_along_connected_way(
-                next_line,
-                remaining_distance - next_line.length,
-                all_lines_with_ids,
-                reverse,
-                visited,
+            return_point, return_wayid, return_visited =extend_along_connected_way(
+                next_line, 
+                remaining_distance - next_line.length, 
+                all_lines_with_ids, 
+                reverse, 
+                visited
             )
-            print("returning3", return_wayid)
-            return return_point, return_wayid
+            return return_point, return_wayid, return_visited
 
-    print(f"No connected line found at point {connection_point}. Stopping.")
-    return None, current_line_way_id
-
-
+    print(f"No connected line found at point {current_line_way_id}. Stopping.")
+    return None, current_line_way_id, visited
 def process_single_bridge(bridge, lines_utm_with_ids, project, inverse_project):
     try:
-        print(f"{bridge['index']}")
+        print(f"{bridge['index']}/6599")
         osm_id = bridge["osm_id"]
         bridge_length = bridge["bridge_length"]
         input_coordinate = bridge["bridge_coordinate"]
+        bridge_id = bridge["bridge_id"]
         half_distance = bridge_length / 2
-
         point = Point(input_coordinate)
         point_utm = transform(project, point)
 
         for line_utm, way_id in lines_utm_with_ids:
             if way_id != osm_id:
                 continue
-
             nearest_point_utm = find_nearest_point_on_line(line_utm, point_utm)
             if line_utm.distance(point_utm) < 1:
                 (
                     forward_point_utm,
                     forward_way_id,
+                    forward_visted,
                     backward_point_utm,
                     backward_way_id,
+                    backward_visited,
                 ) = calculate_points_on_way(
                     line_utm, nearest_point_utm, half_distance, lines_utm_with_ids
                 )
-
+                
                 # Initialize forward and backward points
                 forward_point = Point(-1, -1)
                 backward_point = Point(-1, -1)
@@ -177,43 +168,40 @@ def process_single_bridge(bridge, lines_utm_with_ids, project, inverse_project):
                 if backward_point_utm is not None:
                     backward_point = transform(inverse_project, backward_point_utm)
 
-                print("aaa", forward_way_id, backward_way_id)
                 result = {
                     "original_osm_id": osm_id,
+                    "bridge_id": bridge_id,
                     "bridge_length": bridge_length,
                     "bridge_coordinate": input_coordinate,
                     "input_coordinate": input_coordinate,
                     "nearest_point": (nearest_point_utm.x, nearest_point_utm.y),
                     "forward_point": (forward_point.x, forward_point.y),
                     "backward_point": (backward_point.x, backward_point.y),
-                    "forward_way_id": forward_way_id
-                    if forward_way_id is not None
-                    else -1,
-                    "backward_way_id": backward_way_id
-                    if backward_way_id is not None
-                    else -1,
+                    "forward_way_id": forward_way_id if forward_way_id is not None else -1,
+                    "forward_visted": forward_visted if forward_visted is not None else "None",
+                    "backward_way_id": backward_way_id if backward_way_id is not None else -1,
+                    "backward_visited": backward_visited if backward_visited is not None else "None",
                     "actual_forward_distance": point_utm.distance(forward_point_utm),
                     "actual_backward_distance": point_utm.distance(backward_point_utm),
                 }
 
                 # Write the result immediately to the CSV file
-                with open(
-                    "output-data/csv-files/bridge-osm-association-with-split-coords.csv",
-                    "a",
-                    encoding="utf-8-sig",
-                ) as rf:
+                with open("bridge-osm-association-with-split-coords.csv", "a", encoding="utf-8-sig") as rf:
                     writer = csv.writer(rf)
                     writer.writerow(
                         [
                             result["original_osm_id"],
+                            result["bridge_id"],
                             result["bridge_coordinate"],
                             result["bridge_length"],
                             result["forward_point"][1],
                             result["forward_point"][0],
                             result["forward_way_id"],
+                            result["forward_visted"],
                             result["backward_point"][1],
                             result["backward_point"][0],
                             result["backward_way_id"],
+                            result["backward_visited"],
                         ]
                     )
 
@@ -221,7 +209,6 @@ def process_single_bridge(bridge, lines_utm_with_ids, project, inverse_project):
     except Exception as e:
         logging.error(f"Error processing bridge {bridge['osm_id']}: {e}")
     return None
-
 
 def process_bridge_data_parallel(bridge_data, lines_with_ids, project, inverse_project):
     lines_utm_with_ids = [
@@ -246,13 +233,15 @@ def main():
 
     try:
         # Load the GeoJSON file
-        geojson_file_path = "kentucky-filtered-highway.geojson"
+        geojson_file_path = (
+            "/Users/tanishqsharma/Downloads/kentucky-filtered-highways (1).geojson"
+        )
         geojson_data = load_geojson(geojson_file_path)
         print("Reading OSM data completed......!")
 
         # Load the CSV file containing bridge data
         csv_file_path = (
-            "output-data/csv-files/bridge-osm-association-with-projected-points.csv"
+            "/Users/tanishqsharma/Downloads/bridge-osm-association-with-lengths (1).csv"
         )
         bridge_data = load_csv(csv_file_path)
         print("Reading bridge data completed......!")
@@ -274,22 +263,23 @@ def main():
 
         # Initialize the results CSV file with headers
         with open(
-            "output-data/csv-files/bridge-osm-association-with-split-coords.csv",
-            "w",
-            encoding="utf-8-sig",
+            "bridge-osm-association-with-split-coords.csv", "w", encoding="utf-8-sig"
         ) as rf:
             writer = csv.writer(rf)
             writer.writerow(
                 [
                     "osm_id",
+                    "bridge_id",
                     "bridge_coordinate",
                     "bridge_length",
                     "first_split_point_lat",
                     "first_split_point_lon",
                     "osm_id_for_first_split_point",
+                    "osm_id_ways_in_between_forwards",
                     "second_split_point_lat",
                     "second_split_point_lon",
                     "osm_id_for_second_split_point",
+                    "osm_id_ways_in_between_backwards",
                 ]
             )
 
