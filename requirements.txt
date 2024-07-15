@@ -1,12 +1,9 @@
-dask==2023.6.0
+dask==2024.7.0
 fuzzywuzzy==0.18.0
-geopandas==0.14.0
-networkx==2.8.4
+geopandas==1.0.1
+networkx==3.3
 osmium==3.7.0
-pandas==1.5.3
+pandas==2.2.2
 processing==0.52
 pyproj==3.6.1
 Shapely==2.0.5
-requests==2.32.2
-urllib3==2.2.2
-numpy==2.0.0
