@@ -6,7 +6,13 @@ from multiprocessing import Pool, cpu_count
 import pyproj
 from shapely.geometry import LineString, Point
 from shapely.ops import nearest_points, transform
+import argparse
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Process bridge data.")
+    parser.add_argument("geojson_file", type=str, help="Path to the GeoJSON file.")
+    parser.add_argument("csv_file", type=str, help="Path to the CSV file.")
+    return parser.parse_args()
 
 def setup_logging():
     logging.basicConfig(
@@ -15,127 +21,146 @@ def setup_logging():
         handlers=[logging.FileHandler("debug.log"), logging.StreamHandler()],
     )
 
-
 def load_geojson(file_path):
-    with open(file_path, "r") as f:
-        data = json.load(f)
-    return data
-
+    try:
+        with open(file_path, "r") as f:
+            data = json.load(f)
+        return data
+    except Exception as e:
+        logging.error(f"Error loading GeoJSON file: {e}")
+        return None
 
 def load_csv(file_path):
     bridge_data = []
-    with open(file_path, "r", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        for row_number, row in enumerate(reader, start=1):
-            osm_id = row["final_osm_id"]
-            bridge_id = row["STRUCTURE_NUMBER_008"]
-            bridge_length = float(row["bridge_length"])
-            bridge_coordinate = (float(row["final_lat"]), float(row["final_long"]))
-            bridge_data.append(
-                {
-                    "index": row_number,
-                    "osm_id": osm_id,
-                    "bridge_id": bridge_id,
-                    "bridge_length": bridge_length,
-                    "bridge_coordinate": bridge_coordinate,
-                }
-            )
+    try:
+        with open(file_path, "r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            for row_number, row in enumerate(reader, start=1):
+                try:
+                    osm_id = row["final_osm_id"]
+                    bridge_id = row["STRUCTURE_NUMBER_008"]
+                    bridge_length = float(row["bridge_length"])
+                    bridge_coordinate = (float(row["final_lat"]), float(row["final_long"]))
+                    bridge_data.append(
+                        {
+                            "index": row_number,
+                            "osm_id": osm_id,
+                            "bridge_id": bridge_id,
+                            "bridge_length": bridge_length,
+                            "bridge_coordinate": bridge_coordinate,
+                        }
+                    )
+                except Exception as e:
+                    logging.error(f"Error processing row {row_number} in CSV file: {e}")
+    except Exception as e:
+        logging.error(f"Error loading CSV file: {e}")
     return bridge_data
 
-
 def find_nearest_point_on_line(line, point):
-    nearest_geoms = nearest_points(line, point)
-    return nearest_geoms[0]
-
+    try:
+        nearest_geoms = nearest_points(line, point)
+        return nearest_geoms[0]
+    except Exception as e:
+        logging.error(f"Error finding nearest point on line: {e}")
+        return None
 
 def find_way_id_for_point(point, all_lines_with_ids):
-    for line, way_id in all_lines_with_ids:
-        if line.distance(point) < 1e-6:
-            return way_id
+    try:
+        for line, way_id in all_lines_with_ids:
+            if line.distance(point) < 1e-6:
+                return way_id
+    except Exception as e:
+        logging.error(f"Error finding way ID for point: {e}")
     return None
 
-
 def calculate_points_on_way(line, nearest_point, half_distance, all_lines_with_ids):
-    forward_visted = set()
-    backward_visited = set()
-    nearest_distance = line.project(nearest_point)
-    forward_distance = nearest_distance + half_distance
-    backward_distance = nearest_distance - half_distance
-    forward_point = (
-        line.interpolate(forward_distance) if forward_distance <= line.length else None
-    )
-    backward_point = (
-        line.interpolate(backward_distance) if backward_distance >= 0 else None
-    )
-
-    forward_way_id = None
-    backward_way_id = None
-
-    if forward_point is None:
-        forward_point, forward_way_id, forward_visted = extend_along_connected_way(
-            line, forward_distance - line.length, all_lines_with_ids
+    try:
+        forward_visited = []
+        backward_visited = []
+        nearest_distance = line.project(nearest_point)
+        forward_distance = nearest_distance + half_distance
+        backward_distance = nearest_distance - half_distance
+        forward_point = (
+            line.interpolate(forward_distance) if forward_distance <= line.length else None
         )
-    else:
-        forward_way_id = find_way_id_for_point(forward_point, all_lines_with_ids)
-
-    if backward_point is None:
-        backward_point, backward_way_id, backward_visited = extend_along_connected_way(
-            line, -backward_distance, all_lines_with_ids, reverse=True
+        backward_point = (
+            line.interpolate(backward_distance) if backward_distance >= 0 else None
         )
-    else:
-        backward_way_id = find_way_id_for_point(backward_point, all_lines_with_ids)
 
-    return forward_point, forward_way_id, forward_visted, backward_point, backward_way_id, backward_visited
+        forward_way_id = None
+        backward_way_id = None
 
+        if forward_point is None:
+            forward_point, forward_way_id, forward_visited = extend_along_connected_way(
+                line, forward_distance - line.length, all_lines_with_ids
+            )
+        else:
+            forward_way_id = find_way_id_for_point(forward_point, all_lines_with_ids)
+
+        if backward_point is None:
+            backward_point, backward_way_id, backward_visited = extend_along_connected_way(
+                line, -backward_distance, all_lines_with_ids, reverse=True
+            )
+        else:
+            backward_way_id = find_way_id_for_point(backward_point, all_lines_with_ids)
+
+        return forward_point, forward_way_id, forward_visited, backward_point, backward_way_id, backward_visited
+    except Exception as e:
+        logging.error(f"Error calculating points on way: {e}")
+        return None, None, [], None, None, []
 
 def extend_along_connected_way(
     current_line, remaining_distance, all_lines_with_ids, reverse=False, visited=None
 ):
     if visited is None:
-        visited = set()
+        visited = []
 
-    start_or_end = 0 if reverse else -1
-    connection_point = Point(current_line.coords[start_or_end])
-    current_line_way_id = None
-    possible_next_lines = []
-    for line, way_id in all_lines_with_ids:
-        if line.equals(current_line):
-            current_line_way_id = way_id
-            continue
-        if way_id in visited:
-            continue
-        if connection_point.equals(Point(line.coords[0])):
-            possible_next_lines.append((line, way_id))
-        elif connection_point.equals(Point(line.coords[-1])):
-            inverted_line = LineString(line.coords[::-1])
-            possible_next_lines.append((inverted_line, way_id))
+    try:
+        start_or_end = 0 if reverse else -1
+        connection_point = Point(current_line.coords[start_or_end])
+        current_line_way_id = None
+        possible_next_lines = []
+        for line, way_id in all_lines_with_ids:
+            if line.equals(current_line):
+                current_line_way_id = way_id
+                continue
+            if way_id in visited:
+                continue
+            if connection_point.equals(Point(line.coords[0])):
+                possible_next_lines.append((line, way_id))
+            elif connection_point.equals(Point(line.coords[-1])):
+                inverted_line = LineString(line.coords[::-1])
+                possible_next_lines.append((inverted_line, way_id))
 
-    if len(possible_next_lines) > 1:
-        print(f"Split detected at point {current_line_way_id}. Stopping.")
-        #find the way_id of the current line
+        if len(possible_next_lines) > 1:
+            logging.warning(f"Split detected at point {current_line_way_id}. Stopping.")
+            return None, current_line_way_id, visited
+
+        if len(possible_next_lines) == 1:
+            next_line, way_id = possible_next_lines[0]
+            if remaining_distance <= next_line.length:
+                next_point = next_line.interpolate(remaining_distance)
+                return next_point, way_id, visited
+            else:
+                visited.append(way_id)
+                return_point, return_wayid, return_visited = extend_along_connected_way(
+                    next_line, 
+                    remaining_distance - next_line.length, 
+                    all_lines_with_ids, 
+                    reverse, 
+                    visited
+                )
+                return return_point, return_wayid, return_visited
+
+        logging.warning(f"No connected line found at point {current_line_way_id}. Stopping.")
         return None, current_line_way_id, visited
+    except Exception as e:
+        logging.error(f"Error extending along connected way: {e}")
+        return None, None, visited
 
-    if len(possible_next_lines) == 1:
-        next_line, way_id = possible_next_lines[0]
-        if remaining_distance <= next_line.length:
-            next_point = next_line.interpolate(remaining_distance)
-            return next_point, way_id, visited
-        else:
-            visited.add(way_id)
-            return_point, return_wayid, return_visited =extend_along_connected_way(
-                next_line, 
-                remaining_distance - next_line.length, 
-                all_lines_with_ids, 
-                reverse, 
-                visited
-            )
-            return return_point, return_wayid, return_visited
-
-    print(f"No connected line found at point {current_line_way_id}. Stopping.")
-    return None, current_line_way_id, visited
 def process_single_bridge(bridge, lines_utm_with_ids, project, inverse_project):
     try:
-        print(f"{bridge['index']}/6599")
+        logging.info(f"Processing bridge {bridge['index']}/6599")
         osm_id = bridge["osm_id"]
         bridge_length = bridge["bridge_length"]
         input_coordinate = bridge["bridge_coordinate"]
@@ -152,7 +177,7 @@ def process_single_bridge(bridge, lines_utm_with_ids, project, inverse_project):
                 (
                     forward_point_utm,
                     forward_way_id,
-                    forward_visted,
+                    forward_visited,
                     backward_point_utm,
                     backward_way_id,
                     backward_visited,
@@ -178,7 +203,7 @@ def process_single_bridge(bridge, lines_utm_with_ids, project, inverse_project):
                     "forward_point": (forward_point.x, forward_point.y),
                     "backward_point": (backward_point.x, backward_point.y),
                     "forward_way_id": forward_way_id if forward_way_id is not None else -1,
-                    "forward_visted": forward_visted if forward_visted is not None else "None",
+                    "forward_visited": forward_visited if forward_visited is not None else "None",
                     "backward_way_id": backward_way_id if backward_way_id is not None else -1,
                     "backward_visited": backward_visited if backward_visited is not None else "None",
                     "actual_forward_distance": point_utm.distance(forward_point_utm),
@@ -197,7 +222,7 @@ def process_single_bridge(bridge, lines_utm_with_ids, project, inverse_project):
                             result["forward_point"][1],
                             result["forward_point"][0],
                             result["forward_way_id"],
-                            result["forward_visted"],
+                            result["forward_visited"],
                             result["backward_point"][1],
                             result["backward_point"][0],
                             result["backward_way_id"],
@@ -211,40 +236,47 @@ def process_single_bridge(bridge, lines_utm_with_ids, project, inverse_project):
     return None
 
 def process_bridge_data_parallel(bridge_data, lines_with_ids, project, inverse_project):
-    lines_utm_with_ids = [
-        (transform(project, line), way_id) for way_id, line in lines_with_ids.items()
-    ]
-    pool = Pool(cpu_count())
-    results = pool.starmap(
-        process_single_bridge,
-        [
-            (bridge, lines_utm_with_ids, project, inverse_project)
-            for bridge in bridge_data
-        ],
-    )
-    pool.close()
-    pool.join()
-    return [result for result in results if result is not None]
-
+    try:
+        lines_utm_with_ids = [
+            (transform(project, line), way_id) for way_id, line in lines_with_ids.items()
+        ]
+        pool = Pool(cpu_count())
+        results = pool.starmap(
+            process_single_bridge,
+            [
+                (bridge, lines_utm_with_ids, project, inverse_project)
+                for bridge in bridge_data
+            ],
+        )
+        pool.close()
+        pool.join()
+        return [result for result in results if result is not None]
+    except Exception as e:
+        logging.error(f"Error processing bridge data in parallel: {e}")
+        return []
 
 def main():
     setup_logging()
     logging.info("Starting processing...")
 
+    args = parse_arguments()
+
     try:
         # Load the GeoJSON file
-        geojson_file_path = (
-            "/Users/tanishqsharma/Downloads/kentucky-filtered-highways (1).geojson"
-        )
+        geojson_file_path = args.geojson_file
         geojson_data = load_geojson(geojson_file_path)
-        print("Reading OSM data completed......!")
+        if not geojson_data:
+            logging.error("Failed to load GeoJSON data. Exiting.")
+            return
+        logging.info("Reading OSM data completed.")
 
         # Load the CSV file containing bridge data
-        csv_file_path = (
-            "/Users/tanishqsharma/Downloads/bridge-osm-association-with-lengths (1).csv"
-        )
+        csv_file_path = args.csv_file
         bridge_data = load_csv(csv_file_path)
-        print("Reading bridge data completed......!")
+        if not bridge_data:
+            logging.error("Failed to load bridge data. Exiting.")
+            return
+        logging.info("Reading bridge data completed.")
 
         lines_with_ids = {
             feature["properties"]["osm_id"]: LineString(
@@ -252,7 +284,8 @@ def main():
             )
             for feature in geojson_data["features"]
         }
-        print("Consolidated lines with IDs......!")
+        logging.info("Consolidated lines with IDs.")
+
         # Define projection transformations
         wgs84 = pyproj.CRS("EPSG:4326")
         utm_zone = pyproj.CRS("EPSG:32616")  # UTM zone for your input coordinates
@@ -291,7 +324,6 @@ def main():
         logging.info("Processing completed successfully.")
     except Exception as e:
         logging.error(f"Unexpected error: {e}")
-
 
 if __name__ == "__main__":
     main()
