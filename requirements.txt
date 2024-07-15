@@ -1,8 +1,12 @@
 dask==2023.6.0
+fuzzywuzzy==0.18.0
 geopandas==0.14.0
 networkx==2.8.4
 osmium==3.7.0
 pandas==1.5.3
 processing==0.52
 pyproj==3.6.1
-Shapely==2.0.4
+Shapely==2.0.5
+requests==2.32.2
+urllib3==2.2.2
+numpy==2.0.0
