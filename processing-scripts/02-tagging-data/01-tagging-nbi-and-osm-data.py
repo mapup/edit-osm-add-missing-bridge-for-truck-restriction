@@ -86,7 +86,7 @@ def join_by_location(input_layer, join_layer, join_fields, geometric_predicates)
             "JOIN_FIELDS": join_fields,
             "METHOD": 0,
             "OUTPUT": "memory:",
-            "PREDICATE": geometric_predicates,  
+            "PREDICATE": geometric_predicates,
             # Predicates - [0, 1, 2, 3, 4, 5, 6] = [‘intersects’, ‘contains’, ‘equals’, ‘touches’, ‘overlaps’, ‘within’, ‘crosses’]
             "PREFIX": "",
         },
@@ -214,6 +214,31 @@ def load_layers(nbi_points_fp, osm_fp):
         sys.exit(1)
 
     return nbi_points_gl, osm_gl
+
+
+'''
+def load_layers(nbi_points_fp, osm_fp):
+    """
+    Load required layers and create spatial indexes
+    """
+    nbi_points_gl = QgsVectorLayer(nbi_points_fp, "nbi-points", "ogr")
+    if not nbi_points_gl.isValid():
+        print("NBI points layer failed to load!")
+        sys.exit(1)
+
+    osm_gl = QgsVectorLayer(osm_fp, "filtered", "ogr")
+    if not osm_gl.isValid():
+        print("OSM ways layer failed to load!")
+        sys.exit(1)
+
+    # Create spatial index for NBI points
+    nbi_index = QgsSpatialIndex(nbi_points_gl.getFeatures())
+
+    # Create spatial index for OSM ways
+    osm_index = QgsSpatialIndex(osm_gl.getFeatures())
+
+    return nbi_points_gl, osm_gl
+'''
 
 
 def process_bridge(nbi_points_gl, exploded_osm_gl):
@@ -372,22 +397,8 @@ def process_nearby_bridges(nbi_points_gl):
     keep_fields = ["8 - Structure Number", "8 - Structure Number_2"]
     vl_to_csv_filter(nbi_30_nbi_join, join_csv_path, keep_fields)
 
-    nearby_bridge_ids = get_nearby_bridge_ids_from_csv(join_csv_path)
-    filtered_layer = filter_nbi_layer(
-        vector_layer=nbi_points_gl, exclusion_ids=nearby_bridge_ids
-    )
-
-    output_path = "output-data/gpkg-files/Nearby-filtered-NBI-Bridges.gpkg"
-    QgsVectorFileWriter.writeAsVectorFormat(
-        filtered_layer, output_path, "utf-8", filtered_layer.crs(), "GPKG"
-    )
-
-    print(f"\nOutput file: {output_path} has been created successfully!")
-
     QgsProject.instance().removeMapLayer(buffer_30.id())
     QgsProject.instance().removeMapLayer(nbi_30_nbi_join.id())
-
-    return filtered_layer
 
 
 def process_culverts_from_pbf(nbi_points_gl, osm_pbf_path):
@@ -595,10 +606,10 @@ def main():
     output_layer1 = process_bridge(nbi_points_gl, exploded_osm_gl)
     output_layer2 = process_layer_tag(output_layer1, exploded_osm_gl)
     output_layer3 = process_parallel_bridges(output_layer2, exploded_osm_gl)
-    output_layer4 = process_nearby_bridges(output_layer3)
-    output_layer5 = process_culverts_from_pbf(output_layer4, osm_pbf_path)
+    process_nearby_bridges(output_layer3)
+    output_layer4 = process_culverts_from_pbf(output_layer3, osm_pbf_path)
 
-    process_buffer_join(output_layer5, osm_gl, exploded_osm_gl)
+    process_buffer_join(output_layer4, osm_gl, exploded_osm_gl)
 
 
 if __name__ == "__main__":
