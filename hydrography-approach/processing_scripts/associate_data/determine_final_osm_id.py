@@ -129,17 +129,15 @@ def determine_final_osm_id(group):
     )
 
 
-def merge_join_data_with_intersections():
+def merge_join_data_with_intersections(all_join_csv, intersections_csv):
     """
     Function to tag all data join result with intersections information.
     """
     # Load the final join data
-    final_join_data = pd.read_csv("output-data/csv-files/All-Join-Result.csv")
+    final_join_data = pd.read_csv(all_join_csv)
 
     # Load the intersection data
-    intersection_data = pd.read_csv(
-        "output-data/csv-files/OSM-NHD-Intersections.csv", low_memory=False
-    )
+    intersection_data = pd.read_csv(intersections_csv, low_memory=False)
     intersection_data = intersection_data[
         ["WKT", "osm_id", "permanent_identifier", "gnis_name"]
     ]
@@ -162,7 +160,7 @@ def merge_join_data_with_intersections():
     return df
 
 
-def create_intermediate_association(df):
+def create_intermediate_association(df, intermediate_association):
     """
     Function to create intermediate association among bridges and ways.
     """
@@ -201,13 +199,13 @@ def create_intermediate_association(df):
     ].transform("nunique")
 
     # Save intermediate results
-    df.to_csv("output-data/csv-files/Intermediate-Association.csv")
-    print("\nIntermediate-Association.csv file has been created successfully!")
+    df.to_csv(intermediate_association)
+    print(f"\n{intermediate_association} file has been created successfully!")
 
     return df
 
 
-def create_final_associations(df):
+def create_final_associations(df, association_with_intersections):
     """
     Function to create final association among bridges and ways.
     """
@@ -232,20 +230,20 @@ def create_final_associations(df):
 
     # Save the updated dataframe to a new CSV file
     df.to_csv(
-        "output-data/csv-files/Associations-with-intersections.csv",
+        association_with_intersections,
         index=False,
     )
-    print("\nAssociations-with-intersections.csv file has been created successfully!")
+    print(f"\n{association_with_intersections} file has been created successfully!")
 
     return df
 
 
-def add_bridge_details(df):
+def add_bridge_details(df, nbi_bridge_data, bridge_association_lengths):
     """
     Function to add bridge information to associated data.
     """
     bridge_data_df = pd.read_csv(
-        "input-data/NBI-Kentucky-bridge-data.csv",
+        nbi_bridge_data,
         low_memory=False,
     )
 
@@ -288,20 +286,25 @@ def add_bridge_details(df):
 
     # Save the resulting DataFrame to a new CSV file
     result_df.to_csv(
-        "output-data/csv-files/bridge-osm-association-with-lengths.csv",
+        bridge_association_lengths,
         index=False,
     )
     print(
-        "\nbridge-osm-association-with-lengths.csv file has been created successfully!"
+        f"\n{bridge_association_lengths} file has been created successfully!"
     )
 
 
-def main():
-    df = merge_join_data_with_intersections()
-    intermediate_df = create_intermediate_association(df)
-    final_df = create_final_associations(intermediate_df)
-    add_bridge_details(final_df)
-
-
-if __name__ == "__main__":
-    main()
+def process_final_id(
+    all_join_csv,
+    intersections_csv,
+    intermediate_association,
+    association_with_intersections,
+    nbi_bridge_data,
+    bridge_association_lengths
+):
+    df = merge_join_data_with_intersections(all_join_csv, intersections_csv)
+    intermediate_df = create_intermediate_association(df, intermediate_association)
+    final_df = create_final_associations(
+        intermediate_df, association_with_intersections
+    )
+    add_bridge_details(final_df, nbi_bridge_data, bridge_association_lengths)

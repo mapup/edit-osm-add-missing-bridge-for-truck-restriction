@@ -48,7 +48,7 @@ def convert_to_gpkg(df, output_gpkg_file):
     print(f"GeoPackage saved successfully to {output_gpkg_file}")
 
 
-def process_coordinates(input_csv, output_duplicate_exclude_csv, output_gpkg_file):
+def create_nbi_geopackage(input_csv, output_duplicate_exclude_csv, output_gpkg_file):
     """
     Funtion to perform processing of coordinates and filtering of bridges
     """
@@ -59,12 +59,3 @@ def process_coordinates(input_csv, output_duplicate_exclude_csv, output_gpkg_fil
 
     # Convert the final DataFrame to a GeoPackage file
     convert_to_gpkg(df, output_gpkg_file)
-
-
-# input_csv = "input-data/Kentucky-NBI-bridge-data.csv"
-input_csv = "input-data/NBI-Kentucky-bridge-data.csv"
-output_duplicate_exclude_csv = (
-    "output-data/csv-files/Kentucky-bridge-chosen-coordinates.csv"
-)
-output_gpkg_file = "output-data/gpkg-files/NBI-Kentucky-Bridge-Data.gpkg"
-process_coordinates(input_csv, output_duplicate_exclude_csv, output_gpkg_file)
