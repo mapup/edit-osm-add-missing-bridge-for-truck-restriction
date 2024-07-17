@@ -18,6 +18,7 @@ console.clear();
 // Constants
 const BRIDGE_TAG = "bridge";
 const BRIDGE_VALUE = "yes";
+const BRIDGE_ID_TAG = "bridge:id";
 
 // Improved coordinate list structure
 const coordinatesList = [
@@ -26,7 +27,8 @@ const coordinatesList = [
       { latitude: 36.6490109994807, longitude: -89.06306871832646, wayId: 16208279 },
       { latitude: 36.649008842327014, longitude: -89.06324527869246, wayId: 16208919 },
     ],
-    additionalBridgeWayIds: []
+    additionalBridgeWayIds: [],
+    bridgeId : "057C00032N"
   }
 ];
 
@@ -34,7 +36,15 @@ function getDataSet() {
   return MainApplication.getLayerManager().getEditDataSet();
 }
 
-function addNodeToWay(way, latLon, isFirstPoint, preExistingNodeId) {
+function tagWays(way, bridgeId){
+  const addTagCommand = new ChangePropertyCommand(way, BRIDGE_TAG, BRIDGE_VALUE);
+  UndoRedoHandler.getInstance().add(addTagCommand);
+  const addBridgeIdTagCommand = new ChangePropertyCommand(way, BRIDGE_ID_TAG, bridgeId);
+  UndoRedoHandler.getInstance().add(addBridgeIdTagCommand);
+  console.println(`Bridge way ${way.getId()} tagged successfully.`);
+}
+
+function addNodeToWay(way, latLon, isFirstPoint, preExistingNode, bridgeId) {
   const dataSet = getDataSet();
   const projection = ProjectionRegistry.getProjection();
   const wayNodes = way.getNodes();
@@ -82,17 +92,15 @@ function addNodeToWay(way, latLon, isFirstPoint, preExistingNodeId) {
       let isBridgeWay = false;
 
       if (isFirstPoint) {
-        isBridgeWay = (selectedWayNodes.get(0).getId() === closestNode.getId() && selectedWayNodes.get(selectedWayNodes.size() - 1).getId() === preExistingNodeId) ||
-                      (selectedWayNodes.get(selectedWayNodes.size() - 1).getId() === closestNode.getId() && selectedWayNodes.get(0).getId() === preExistingNodeId);
+        isBridgeWay = (selectedWayNodes.get(0) === closestNode && selectedWayNodes.get(selectedWayNodes.size() - 1) === preExistingNode) ||
+          (selectedWayNodes.get(selectedWayNodes.size() - 1) === closestNode && selectedWayNodes.get(0) === preExistingNode);
       } else {
-        isBridgeWay = (selectedWayNodes.get(0).getId() === preExistingNodeId && selectedWayNodes.get(selectedWayNodes.size() - 1).getId() === closestNode.getId()) ||
-                      (selectedWayNodes.get(selectedWayNodes.size() - 1).getId() === preExistingNodeId && selectedWayNodes.get(0).getId() === closestNode.getId());
+        isBridgeWay = (selectedWayNodes.get(0) === preExistingNode && selectedWayNodes.get(selectedWayNodes.size() - 1) === closestNode) ||
+          (selectedWayNodes.get(selectedWayNodes.size() - 1) === preExistingNode && selectedWayNodes.get(0) === closestNode);
       }
 
       if (isBridgeWay) {
-        const addTagCommand = new ChangePropertyCommand(selectedWay, BRIDGE_TAG, BRIDGE_VALUE);
-        UndoRedoHandler.getInstance().add(addTagCommand);
-        console.println(`Bridge way ${selectedWay.getId()} tagged successfully.`);
+        tagWays(selectedWay, bridgeId);
         break;
       }
     }
@@ -129,7 +137,7 @@ function processCoordinateSet(coordinateSet) {
 
   const currentPoint = points[0];
   const nextPoint = points[1];
-
+  const bridgeId = coordinateSet.bridgeId;
   const currentWay = dataSet.getPrimitiveById(currentPoint.wayId, OsmPrimitiveType.WAY);
   const nextWay = dataSet.getPrimitiveById(nextPoint.wayId, OsmPrimitiveType.WAY);
 
@@ -149,9 +157,16 @@ function processCoordinateSet(coordinateSet) {
     } else if (currentWayNodes.get(currentWayNodes.size() - 1).getId() === nextWayNodes.get(0).getId() || currentWayNodes.get(currentWayNodes.size() - 1).getId() === nextWayNodes.get(nextWayNodes.size() - 1).getId()) {
       commonNode = currentWayNodes.get(currentWayNodes.size() - 1);
     }
-
-    addNodeToWay(currentWay, new LatLon(currentPoint.latitude, currentPoint.longitude), true, commonNode.getId());
-    addNodeToWay(nextWay, new LatLon(nextPoint.latitude, nextPoint.longitude), false, commonNode.getId());
+    if (currentPoint.latitude === -1 && currentPoint.longitude === -1) {
+      tagWays(currentWay, bridgeId);
+    } else {
+      addNodeToWay(currentWay, new LatLon(currentPoint.latitude, currentPoint.longitude), true, commonNode, bridgeId);
+    }
+    if (nextPoint.latitude === -1 && nextPoint.longitude === -1) {
+      tagWays(nextWay, bridgeId);
+    } else {
+      addNodeToWay(nextWay, new LatLon(nextPoint.latitude, nextPoint.longitude), false, commonNode,bridgeId);
+    }
   } else {
     // Find common node for current way and additional bridge way
     let commonNode = null;
@@ -164,22 +179,28 @@ function processCoordinateSet(coordinateSet) {
     } else if (currentWayNodes.get(currentWayNodes.size() - 1).getId() === additionalBridgeWayNodes.get(0).getId() || currentWayNodes.get(currentWayNodes.size() - 1).getId() === additionalBridgeWayNodes.get(additionalBridgeWayNodes.size() - 1).getId()) {
       commonNode = currentWayNodes.get(currentWayNodes.size() - 1);
     }
-    
-    addNodeToWay(currentWay, new LatLon(currentPoint.latitude, currentPoint.longitude), true, commonNode.getId());
-
+    if (currentPoint.latitude === -1 && currentPoint.longitude === -1) {
+      tagWays(currentWay, bridgeId);
+    } else {
+      addNodeToWay(currentWay, new LatLon(currentPoint.latitude, currentPoint.longitude), true, commonNode, bridgeId);
+    }
     // Find common node for next way and additional bridge way
     commonNode = null;
     const nextWayNodes = nextWay.getNodes();
     const lastAdditionalBridgeWay = dataSet.getPrimitiveById(additionalBridgeWayIds[additionalBridgeWayIds.length - 1], OsmPrimitiveType.WAY);
     const lastAdditionalBridgeWayNodes = lastAdditionalBridgeWay.getNodes();
 
-    if (nextWayNodes.get(0).getId() === lastAdditionalBridgeWayNodes.get(0).getId() || nextWayNodes.get(0).getId() === lastAdditionalBridgeWayNodes.get(lastAdditionalBridgeWayNodes.size() - 1).getId()) {
+    if (nextWayNodes.get(0) === lastAdditionalBridgeWayNodes.get(0)|| nextWayNodes.get(0) === lastAdditionalBridgeWayNodes.get(lastAdditionalBridgeWayNodes.size() - 1)) {
       commonNode = nextWayNodes.get(0);
-    } else if (nextWayNodes.get(nextWayNodes.size() - 1).getId() === lastAdditionalBridgeWayNodes.get(0).getId() || nextWayNodes.get(nextWayNodes.size() - 1).getId() === lastAdditionalBridgeWayNodes.get(lastAdditionalBridgeWayNodes.size() - 1).getId()) {
+    } else if (nextWayNodes.get(nextWayNodes.size() - 1) === lastAdditionalBridgeWayNodes.get(0) || nextWayNodes.get(nextWayNodes.size() - 1) === lastAdditionalBridgeWayNodes.get(lastAdditionalBridgeWayNodes.size() - 1)) {
       commonNode = nextWayNodes.get(nextWayNodes.size() - 1);
     }
 
-    addNodeToWay(nextWay, new LatLon(nextPoint.latitude, nextPoint.longitude), false, commonNode.getId());
+    if (nextPoint.latitude === -1 && nextPoint.longitude === -1) {
+      tagWays(nextWay, bridgeId);
+    } else {
+      addNodeToWay(nextWay, new LatLon(nextPoint.latitude, nextPoint.longitude), false, commonNode, bridgeId);
+    }
   }
 
   tagAdditionalBridgeWays(additionalBridgeWayIds);

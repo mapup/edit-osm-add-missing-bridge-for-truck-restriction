@@ -12,7 +12,7 @@ import java.util.ArrayList
 # Constants
 BRIDGE_TAG = "bridge"
 BRIDGE_VALUE = "yes"
-
+BRIDGE_ID_TAG = "bridge:id"
 
 coordinatesList = [
     {
@@ -20,15 +20,22 @@ coordinatesList = [
             {"latitude": 36.6490109994807, "longitude": -89.06306871832646, "wayId": 16208279},
             {"latitude": 36.649008842327014, "longitude": -89.06324527869246, "wayId": 16208919},
         ],
-        "additionalBridgeWayIds": []
+        "additionalBridgeWayIds": [],
+        "bridgeId": "098C00033N"
     }
 ]
 
+def tagWayAsBridge(way, bridgeId):
+    addTagCommand = ChangePropertyCommand(way, BRIDGE_TAG, BRIDGE_VALUE)
+    UndoRedoHandler.getInstance().add(addTagCommand)
+    addBridgeIdCommand = ChangePropertyCommand(way, BRIDGE_ID_TAG, bridgeId)
+    UndoRedoHandler.getInstance().add(addBridgeIdCommand)
+    print("Way %d tagged successfully." % way.getId())
 
 def getDataSet():
     return MainApplication.getLayerManager().getEditDataSet()
 
-def addNodeToWay(way, latLon, isFirstPoint, preExistingNodeId):
+def addNodeToWay(way, latLon, isFirstPoint, preExistingNode, bridgeId):
     dataSet = getDataSet()
     projection = ProjectionRegistry.getProjection()
     wayNodes = way.getNodes()
@@ -74,14 +81,12 @@ def addNodeToWay(way, latLon, isFirstPoint, preExistingNodeId):
             isBridgeWay = False
 
             if isFirstPoint:
-                isBridgeWay = (selectedWayNodes[0].getId() == closestNode.getId() and selectedWayNodes[-1].getId() == preExistingNodeId) or (selectedWayNodes[-1].getId() == closestNode.getId() and selectedWayNodes[0].getId() == preExistingNodeId)
+                isBridgeWay = (selectedWayNodes[0] == closestNode and selectedWayNodes[-1] == preExistingNode) or (selectedWayNodes[-1] == closestNode and selectedWayNodes[0] == preExistingNode)
             else:
-                isBridgeWay = (selectedWayNodes[0].getId() == preExistingNodeId and selectedWayNodes[-1].getId() == closestNode.getId()) or (selectedWayNodes[-1].getId() == preExistingNodeId and selectedWayNodes[0].getId() == closestNode.getId())
+                isBridgeWay = (selectedWayNodes[0] == preExistingNode and selectedWayNodes[-1] == closestNode) or (selectedWayNodes[-1] == preExistingNode and selectedWayNodes[0] == closestNode)
 
             if isBridgeWay:
-                addTagCommand = ChangePropertyCommand(selectedWay, BRIDGE_TAG, BRIDGE_VALUE)
-                UndoRedoHandler.getInstance().add(addTagCommand)
-                print("Bridge way %d tagged successfully." % selectedWay.getId())
+                tagWayAsBridge(selectedWay, bridgeId)
                 break
 
         return closestNode
@@ -89,14 +94,12 @@ def addNodeToWay(way, latLon, isFirstPoint, preExistingNodeId):
         print("Failed to find a suitable segment to insert the node.")
         return None
 
-def tagAdditionalBridgeWays(additionalBridgeWayIds):
+def tagAdditionalBridgeWays(additionalBridgeWayIds, bridgeId):
     dataSet = getDataSet()
     for wayId in additionalBridgeWayIds:
         way = dataSet.getPrimitiveById(wayId, OsmPrimitiveType.WAY)
         if way:
-            addTagCommand = ChangePropertyCommand(way, BRIDGE_TAG, BRIDGE_VALUE)
-            UndoRedoHandler.getInstance().add(addTagCommand)
-            print("Additional bridge way %d tagged successfully." % wayId)
+            tagWayAsBridge(way, bridgeId)
         else:
             print("Additional bridge way %d not found." % wayId)
 
@@ -109,7 +112,7 @@ def processCoordinateSet(coordinateSet):
     points = coordinateSet["points"]
     additionalBridgeWayIds = coordinateSet["additionalBridgeWayIds"]
 
-    
+    bridgeId = coordinateSet["bridgeId"]
     currentPoint = points[0]
     nextPoint = points[0 + 1]
 
@@ -125,14 +128,19 @@ def processCoordinateSet(coordinateSet):
         currentWayNodes = currentWay.getNodes()
         nextWayNodes = nextWay.getNodes()
 
-        if currentWayNodes[0].getId() == nextWayNodes[0].getId() or currentWayNodes[0].getId() == nextWayNodes[-1].getId():
+        if currentWayNodes[0] == nextWayNodes[0] or currentWayNodes[0] == nextWayNodes[-1]:
             commonNode = currentWayNodes[0]
-        elif currentWayNodes[-1].getId() == nextWayNodes[0].getId() or currentWayNodes[-1].getId() == nextWayNodes[-1].getId():
+        elif currentWayNodes[-1] == nextWayNodes[0] or currentWayNodes[-1] == nextWayNodes[-1]:
             commonNode = currentWayNodes[-1]
 
-        addNodeToWay(currentWay, LatLon(currentPoint["latitude"], currentPoint["longitude"]), True, commonNode.getId())
-        
-        addNodeToWay(nextWay, LatLon(nextPoint["latitude"], nextPoint["longitude"]), False, commonNode.getId())
+        if currentPoint["latitude"] == -1 and currentPoint["longitude"] == -1:
+            tagAdditionalBridgeWays(currentWay, bridgeId)
+        else:
+            addNodeToWay(currentWay, LatLon(currentPoint["latitude"], currentPoint["longitude"]), True, commonNode, bridgeId)
+        if currentPoint["latitude"] == -1 and currentPoint["longitude"] == -1:
+            tagAdditionalBridgeWays(nextWay, bridgeId)
+        else:    
+            addNodeToWay(nextWay, LatLon(nextPoint["latitude"], nextPoint["longitude"]), False, commonNode, bridgeId)
     else:
         # Find common node for current way and additional bridge way
         commonNode = None
@@ -140,12 +148,15 @@ def processCoordinateSet(coordinateSet):
         additionalBridgeWay = dataSet.getPrimitiveById(additionalBridgeWayIds[0], OsmPrimitiveType.WAY)
         additionalBridgeWayNodes = additionalBridgeWay.getNodes()
 
-        if currentWayNodes[0].getId() == additionalBridgeWayNodes[0].getId() or currentWayNodes[0].getId() == additionalBridgeWayNodes[-1].getId():
+        if currentWayNodes[0] == additionalBridgeWayNodes[0] or currentWayNodes[0] == additionalBridgeWayNodes[-1]:
             commonNode = currentWayNodes[0]
-        elif currentWayNodes[-1].getId() == additionalBridgeWayNodes[0].getId() or currentWayNodes[-1].getId() == additionalBridgeWayNodes[-1].getId():
+        elif currentWayNodes[-1] == additionalBridgeWayNodes[0] or currentWayNodes[-1] == additionalBridgeWayNodes[-1]:
             commonNode = currentWayNodes[-1]
-        
-        addNodeToWay(currentWay, LatLon(currentPoint["latitude"], currentPoint["longitude"]), True, commonNode.getId())
+        if currentPoint["latitude"] == -1 and currentPoint["longitude"] == -1:
+            addTagCommand = ChangePropertyCommand(currentWay, BRIDGE_TAG, BRIDGE_VALUE)
+            UndoRedoHandler.getInstance().add(addTagCommand)
+        else:
+            addNodeToWay(currentWay, LatLon(currentPoint["latitude"], currentPoint["longitude"]), True, commonNode)
 
         # Find common node for next way and additional bridge way
         commonNode = None
@@ -153,14 +164,17 @@ def processCoordinateSet(coordinateSet):
         additionalBridgeWay = dataSet.getPrimitiveById(additionalBridgeWayIds[-1], OsmPrimitiveType.WAY)
         additionalBridgeWayNodes = additionalBridgeWay.getNodes()
 
-        if nextWayNodes[0].getId() == additionalBridgeWayNodes[0].getId() or nextWayNodes[0].getId() == additionalBridgeWayNodes[-1].getId():
+        if nextWayNodes[0] == additionalBridgeWayNodes[0] or nextWayNodes[0] == additionalBridgeWayNodes[-1]:
             commonNode = nextWayNodes[0]
-        elif nextWayNodes[-1].getId() == additionalBridgeWayNodes[0].getId() or nextWayNodes[-1].getId() == additionalBridgeWayNodes[-1].getId():
+        elif nextWayNodes[-1] == additionalBridgeWayNodes[0] or nextWayNodes[-1] == additionalBridgeWayNodes[-1]:
             commonNode = nextWayNodes[-1]
+        if currentPoint["latitude"] == -1 and currentPoint["longitude"] == -1:
+            addTagCommand = ChangePropertyCommand(nextWay, BRIDGE_TAG, BRIDGE_VALUE)
+            UndoRedoHandler.getInstance().add(addTagCommand)
+        else:
+            addNodeToWay(nextWay, LatLon(nextPoint["latitude"], nextPoint["longitude"]), False, commonNode, bridgeId)
 
-        addNodeToWay(nextWay, LatLon(nextPoint["latitude"], nextPoint["longitude"]), False, commonNode.getId())
-
-    tagAdditionalBridgeWays(additionalBridgeWayIds)
+    tagAdditionalBridgeWays(additionalBridgeWayIds, bridgeId)
 
     MainApplication.getMap().mapView.repaint()
 
