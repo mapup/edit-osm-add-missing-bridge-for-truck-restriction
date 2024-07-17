@@ -35,9 +35,11 @@ def main():
     state_name = "Kentucky"
 
     # Load config file
+    print("\nLoading the config file.")
     config = load_config(state_name)
 
     # Make the required directories for storing outputs
+    print("\nMake the required directories.")
     os.makedirs(
         config["output_data_folders"]["state_folder"],
         exist_ok=True,
@@ -50,6 +52,8 @@ def main():
     input_osm_pbf = config["input_data_folder"]["state_latest_osm"]
     output_osm_pbf = config["output_files"]["filtered_osm_pbf"]
     output_gpkg = config["output_files"]["filtered_highways"]
+
+    print("\nFiltering OSM ways data.")
     filter_osm_ways.filter_ways(input_osm_pbf, output_osm_pbf, output_gpkg)
 
     # --------------------------------------------Filter NBI data and create geopackage--------------------------------------------
@@ -57,6 +61,7 @@ def main():
     output_duplicate_exclude_csv = config["output_files"]["duplicate_exclude_csv"]
     output_gpkg_file = config["output_files"]["nbi_geopackage"]
 
+    print("\nFiltering NBI bridge data.")
     process_filter_nbi_bridges.create_nbi_geopackage(
         input_csv, output_duplicate_exclude_csv, output_gpkg_file
     )
@@ -81,6 +86,7 @@ def main():
     nbi_10_join_csv = config["output_files"]["nbi_10_join_csv"]
     nbi_30_join_csv = config["output_files"]["nbi_30_join_csv"]
 
+    print("\nTagging NBI and OSM data.")
     tag_nbi_and_osm_data.process_tagging(
         nbi_geopackage,
         filtered_highways,
@@ -115,10 +121,12 @@ def main():
     bridge_match_percentage = config["output_files"]["bridge_match_percentage"]
     final_bridges_csv = config["output_files"]["final_bridges_csv"]
 
+    print("\nJoining association data together.")
     join_all_data.process_all_join(
         nbi_30_join_csv, nbi_10_join_csv, all_join_dask, all_join_csv
     )
 
+    print("\nDetermining final OSM way ID for each NBI bridge.")
     determine_final_osm_id.process_final_id(
         all_join_csv,
         intersections_csv,
@@ -128,6 +136,7 @@ def main():
         bridge_association_lengths,
     )
 
+    print("\nGetting NBI point projections on associated ways.")
     get_point_projections_on_ways.run(
         final_bridges,
         filtered_highways,
@@ -135,12 +144,15 @@ def main():
         bridge_with_proj_points,
     )
 
+    print("\nCalculating fuzzy match for OSM road name.")
     calculate_match_percentage.run(bridge_with_proj_points, bridge_match_percentage)
 
+    print("\nExcluding nearby bridges.")
     exclude_nearby_bridges.run(
         bridge_match_percentage, nearby_join_csv, final_bridges_csv
     )
 
+    print("\nProcess completed.")
 
 if __name__ == "__main__":
     main()
