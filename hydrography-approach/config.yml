@@ -1,0 +1,38 @@
+input_data_folder:
+  nbi_bridge_data: "input-data/{{ state }}/NBI-{{ state }}-bridge-data.csv"
+  nhd_streams_flowline: "input-data/{{ state }}/NHD-{{ state }}-Streams-Flowline.gpkg"
+  state_latest_osm: "input-data/{{ state }}/{{ state }}-latest.osm.pbf"
+
+output_data_folders:
+  state_folder: "output-data/{{ state }}"
+  csv_files: "output-data/{{ state }}/csv-files"
+  gpkg_files: "output-data/{{ state }}/gpkg-files"
+  pbf_files: "output-data/{{ state }}/pbf-files"
+
+output_files:
+  filtered_osm_pbf: "output-data/{{ state }}/pbf-files/{{ state }}-filtered-highways.osm.pbf"
+  filtered_highways: "output-data/{{ state }}/gpkg-files/{{ state }}-filtered-highways.gpkg"
+  duplicate_exclude_csv: "output-data/{{ state }}/csv-files/{{ state }}-bridge-chosen-coordinates.csv"
+  nbi_geopackage: "output-data/{{ state }}/gpkg-files/{{ state }}-NBI-bridges.gpkg"
+  bridge_yes_join_csv: "output-data/{{ state }}/csv-files/OSM-Bridge-Yes-NBI-Join.csv"
+  yes_filter_bridges: "output-data/{{ state }}/gpkg-files/NBI-Filtered-Yes-Manmade-Bridges.gpkg"
+  manmade_join_csv: "output-data/{{ state }}/csv-files/OSM-NBI-Manmade-Bridge-Layer-Filtered-Join.csv"
+  manmade_filter_bridges: "output-data/{{ state }}/gpkg-files/NBI-Filtered-Yes-Manmade-Layer-Bridges.gpkg"
+  parallel_join_csv: "output-data/{{ state }}/csv-files/OSM-Oneways-NBI-Join.csv"
+  parallel_filter_bridges: "output-data/{{ state }}/gpkg-files/Parallel-Filter-Bridges.gpkg"
+  nearby_join_csv: "output-data/{{ state }}/csv-files/NBI-30-NBI-Join.csv"
+  culvert_join_csv: "output-data/{{ state }}/csv-files/OSM-Culvert-NBI-Join.csv"
+  final_bridges: "output-data/{{ state }}/gpkg-files/{{ state }}-Final-NBI-Bridges.gpkg"
+  intersections_csv: "output-data/{{ state }}/csv-files/OSM-NHD-Intersections.csv"
+  osm_nhd_join_csv: "output-data/{{ state }}/csv-files/OSM-NHD-Join.csv"
+  nbi_10_join_csv: "output-data/{{ state }}/csv-files/NBI-10-NHD-Join.csv"
+  nbi_30_join_csv: "output-data/{{ state }}/csv-files/NBI-30-OSM-NHD-Join.csv"
+  all_join_dask: "output-data/{{ state }}/csv-files/result_directory"
+  all_join_csv: "output-data/{{ state }}/csv-files/All-Join-Result.csv"
+  intermediate_association: "output-data/{{ state }}/csv-files/Intermediate-Association.csv"
+  association_with_intersections: "output-data/{{ state }}/csv-files/Associations-with-intersections.csv"
+  bridge_association_lengths: "output-data/{{ state }}/csv-files/bridge-osm-association-with-lengths.csv"
+  bridge_with_proj_points: "output-data/{{ state }}/csv-files/bridge-osm-association-with-projected-points.csv"
+  bridge_match_percentage: "output-data/{{ state }}/csv-files/Association-match-check-with-percentage.csv"
+  final_bridges_csv: "output-data/{{ state }}/csv-files/Final-bridges-with-percentage-match.csv"
+  

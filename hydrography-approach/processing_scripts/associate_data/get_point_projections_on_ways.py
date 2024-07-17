@@ -8,18 +8,18 @@ def project_point_on_line(point, line):
     return projected_point
 
 
-def main():
+def run(final_bridges, filtered_highways, bridge_association_lengths, bridge_with_proj_points):
     # Load geopackage files
     bridge_points_gdf = gpd.read_file(
-        "output-data/gpkg-files/Final-filtered-NBI-Bridges.gpkg"
+        final_bridges
     )
     osm_ways_gdf = gpd.read_file(
-        "output-data/gpkg-files/kentucky-filtered-highways.gpkg", layer="lines"
+        filtered_highways, layer="lines"
     )
 
     # Load CSV file
     associations_df = pd.read_csv(
-        "output-data/csv-files/bridge-osm-association-with-lengths.csv"
+        bridge_association_lengths
     )
 
     # Ensure CRS is consistent
@@ -98,10 +98,6 @@ def main():
 
     # Save to CSV
     output_df.to_csv(
-        "output-data/csv-files/bridge-osm-association-with-projected-points.csv",
+        bridge_with_proj_points,
         index=False,
     )
-
-
-if __name__ == "__main__":
-    main()

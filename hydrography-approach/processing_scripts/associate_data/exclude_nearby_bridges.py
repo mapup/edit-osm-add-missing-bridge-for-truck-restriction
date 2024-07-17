@@ -61,21 +61,10 @@ def filter_duplicates_and_output(bridge_df, join_df, output_csv):
     print(f"Filtered bridge information saved to '{output_csv}'.")
 
 
-def main():
-    # File paths
-    bridge_info_csv = (
-        "output-data/csv-files/Association-match-check-with-percentage.csv"
-    )
-    nearby_join_csv = "output-data/csv-files/NBI-30-NBI-Join.csv"
-    output_csv = "output-data/csv-files/Final-bridges-with-percentage-match.csv"
-
+def run(bridge_match_percentage, nearby_join_csv, final_bridges_csv):
     # Load data
-    bridge_df = load_bridge_info(bridge_info_csv)
+    bridge_df = load_bridge_info(bridge_match_percentage)
     join_df = load_nearby_join(nearby_join_csv)
 
     # Filter duplicates based on osm_similarity score and output filtered bridge info
-    filter_duplicates_and_output(bridge_df, join_df, output_csv)
-
-
-if __name__ == "__main__":
-    main()
+    filter_duplicates_and_output(bridge_df, join_df, final_bridges_csv)
