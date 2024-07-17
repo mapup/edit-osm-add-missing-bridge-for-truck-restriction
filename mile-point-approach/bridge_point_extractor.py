@@ -13,8 +13,13 @@ CRS_EPSG_4326 = "EPSG:4326"
 CRS_EPSG_3857 = "EPSG:3857"
 CRS_EPSG_6473 = "EPSG:6473"
 
-
 def read_and_clean_road_df():
+    """
+    Reads and cleans the road data from the specified GeoPackage file.
+
+    Returns:
+        GeoDataFrame: Cleaned road data with selected columns renamed.
+    """
     road_df = gpd.read_file(ROAD_LAYER, engine="pyogrio", use_arrow=True)
     road_association = {
         "RT_UNIQUE": "rt_unique",
@@ -30,8 +35,13 @@ def read_and_clean_road_df():
     road_df = road_df[list(road_association.keys())].rename(columns=road_association)
     return road_df
 
-
 def read_and_clean_bridge_df():
+    """
+    Reads and cleans the bridge data from the specified GeoPackage file.
+
+    Returns:
+        GeoDataFrame: Cleaned bridge data with selected columns renamed and duplicates removed.
+    """
     bridge_df = gpd.read_file(BRIDGE_LAYER, engine="pyogrio", use_arrow=True)
     bridge_association = {
         "RT_UNIQUE": "rt_unique",
@@ -50,8 +60,16 @@ def read_and_clean_bridge_df():
     bridge_df.drop_duplicates(subset=["bridge_id"], inplace=True)
     return bridge_df
 
-
 def filter_left_right_bridges(joined_df):
+    """
+    Filters out bridges containing 'L' or 'R' in their ID that have both left and right lanes.
+
+    Args:
+        joined_df (GeoDataFrame): DataFrame containing joined road and bridge data.
+
+    Returns:
+        GeoDataFrame: Filtered DataFrame without left-right bridges.
+    """
     bridges_containing_LR = joined_df[
         joined_df["bridge_id"].str.contains("L")
         | joined_df["bridge_id"].str.contains("R")
@@ -81,14 +99,33 @@ def filter_left_right_bridges(joined_df):
     )
     return joined_df[~left_right_mask]
 
-
 def add_distance_column(df, col1, col2):
+    """
+    Adds a distance column to the DataFrame by calculating the distance between two geometry columns.
+
+    Args:
+        df (DataFrame): DataFrame containing geometry columns.
+        col1 (str): Column name for the first geometry.
+        col2 (str): Column name for the second geometry.
+
+    Note:
+        This function assumes the geometries are in CRS EPSG:3857.
+    """
     if isinstance(df["col1"], pd.Series):
         df["col1"] = gpd.GeoSeries(df["col1"], crs=CRS_EPSG_3857)
         df["distance"] = df.apply(lambda row: row["col1"].distance(row["col2"]), axis=1)
 
-
 def merge_road_and_bridge_dfs(road_df, bridge_df):
+    """
+    Merges the road and bridge DataFrames based on common columns and filters the result.
+
+    Args:
+        road_df (GeoDataFrame): Cleaned road data.
+        bridge_df (GeoDataFrame): Cleaned bridge data.
+
+    Returns:
+        GeoDataFrame: Merged and filtered DataFrame.
+    """
     joined_df = road_df.merge(
         bridge_df,
         how="inner",
@@ -138,8 +175,17 @@ def merge_road_and_bridge_dfs(road_df, bridge_df):
     joined_df = joined_df[(joined_df["distance_from_bridge"] < 1000)]
     return joined_df
 
-
 def interpolate_point_geography(line, distance_miles):
+    """
+    Interpolates a point on a line at a specified distance.
+
+    Args:
+        line (LineString): Line geometry to interpolate along.
+        distance_miles (float): Distance in miles from the start of the line to interpolate.
+
+    Returns:
+        tuple: Interpolated point and corresponding line segment, or (pd.NA, pd.NA) if distance exceeds the line length.
+    """
     coord_list = [tuple(reversed(line.coords[i])) for i in range(len(line.coords))]
     geodesic = Geodesic(6378137, 1 / 298.257222101)
     total_length = sum(
@@ -174,8 +220,18 @@ def interpolate_point_geography(line, distance_miles):
         current_distance += segment_length
     return pd.NA, pd.NA
 
-
 def select_rows_with_max_scores(df, distance_col, fuzzy_col):
+    """
+    Selects rows with the highest combined score of distance and fuzzy matching.
+
+    Args:
+        df (DataFrame): DataFrame containing distance and fuzzy matching columns.
+        distance_col (str): Column name for distance values.
+        fuzzy_col (str): Column name for fuzzy matching scores.
+
+    Returns:
+        DataFrame: Filtered DataFrame with rows having the highest combined score for each object_id.
+    """
     df["distance_scaled"] = (df[distance_col].max() - df[distance_col]) / (
         df[distance_col].max() - df[distance_col].min()
     )
@@ -195,8 +251,16 @@ def select_rows_with_max_scores(df, distance_col, fuzzy_col):
     result_df = df.loc[idx].reset_index(drop=True)
     return result_df
 
-
 def process_joined_df(joined_df):
+    """
+    Processes the joined DataFrame to interpolate bridge points and calculate distances.
+
+    Args:
+        joined_df (GeoDataFrame): DataFrame containing joined road and bridge data.
+
+    Returns:
+        GeoDataFrame: Processed DataFrame with interpolated bridge points and distances.
+    """
     result = joined_df[["geometry_road", "bridge_line_segment_point"]].apply(
         lambda row: interpolate_point_geography(
             row["geometry_road"], row["bridge_line_segment_point"] * 1609.344
@@ -229,8 +293,13 @@ def process_joined_df(joined_df):
 
     return final_df
 
-
 def export_geodataframes(joined_df):
+    """
+    Exports the processed DataFrame to GeoPackage files for interpolated bridge points and road segments.
+
+    Args:
+        joined_df (GeoDataFrame): Processed DataFrame to export.
+    """
     point_filtered = joined_df[
         [
             "lrs_id",
@@ -262,14 +331,15 @@ def export_geodataframes(joined_df):
     road_filtered.set_geometry(road_filtered["geometry"])
     gpd.GeoDataFrame(road_filtered).to_file(INTERPOLATED_ROAD_OUTPUT, driver="GPKG")
 
-
 def main():
+    """
+    Main function to execute the processing pipeline.
+    """
     road_df = read_and_clean_road_df()
     bridge_df = read_and_clean_bridge_df()
     joined_df = merge_road_and_bridge_dfs(road_df, bridge_df)
     joined_df = process_joined_df(joined_df)
     export_geodataframes(joined_df)
-
 
 if __name__ == "__main__":
     main()

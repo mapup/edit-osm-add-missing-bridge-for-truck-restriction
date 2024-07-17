@@ -9,6 +9,12 @@ OUTPUT_OSM_POINTS_GPKG = "osm_road_points.gpkg"
 
 
 def load_and_prepare_data():
+    """
+    Loads and prepares the bridge, OSM, and bridge location data from the specified file paths.
+
+    Returns:
+        tuple: A tuple containing the prepared bridge, OSM, and bridge location GeoDataFrames.
+    """
     bridge_df = gpd.read_file(
         BRIDGE_LINK_LAYER, engine="pyogrio", use_arrow=True
     ).to_crs(3857)
@@ -27,6 +33,17 @@ def load_and_prepare_data():
 
 
 def process_and_merge_osm_data(osm_df, bridge_df, bridge_location_df):
+    """
+    Processes and merges the OSM data with bridge data and bridge location data.
+
+    Args:
+        osm_df (GeoDataFrame): GeoDataFrame containing OSM road data.
+        bridge_df (GeoDataFrame): GeoDataFrame containing bridge data.
+        bridge_location_df (GeoDataFrame): GeoDataFrame containing bridge location data.
+
+    Returns:
+        tuple: A tuple containing the final merged GeoDataFrame and the point geometries.
+    """
     osm_df = gpd.overlay(osm_df, bridge_df, how="intersection")
     osm_df = osm_df[osm_df["bridge_id"].notnull()]
     osm_df["osm_length"] = osm_df.geometry.length
@@ -44,6 +61,13 @@ def process_and_merge_osm_data(osm_df, bridge_df, bridge_location_df):
 
 
 def save_results(final_df, point_geom):
+    """
+    Saves the final merged results to GeoPackage files.
+
+    Args:
+        final_df (GeoDataFrame): The final merged GeoDataFrame to save.
+        point_geom (GeoSeries): The point geometries to save.
+    """
     final_df.drop(columns=["geometry_bridge"], inplace=True)
     osm_points = final_df.set_geometry(point_geom)
     osm_points.to_file(OUTPUT_OSM_POINTS_GPKG)
@@ -51,6 +75,9 @@ def save_results(final_df, point_geom):
 
 
 def main():
+    """
+    Main function to execute the processing pipeline.
+    """
     bridge_df, osm_df, bridge_location_df = load_and_prepare_data()
     final_df, point_geom = process_and_merge_osm_data(
         osm_df, bridge_df, bridge_location_df
