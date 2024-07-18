@@ -1,5 +1,6 @@
 import geopandas as gpd
 import pandas as pd
+from shapely.ops import nearest_points
 
 # Constants for file paths
 BRIDGE_LINK_LAYER = "interpolated_road.gpkg"
@@ -33,7 +34,28 @@ def load_and_prepare_data():
     return bridge_df, osm_df, bridge_location_df
 
 
-def process_and_merge_osm_data(osm_df, bridge_df, bridge_location_df):
+def project_point_to_line(point,line,max_distance = float('inf')):
+    """Project a point perpendicularly onto a line.
+
+    Args:
+        point (shapely.geometry.Point): The point to project.
+        line (shapely.geometry.LineString): The line to project onto.
+        max_distance (float, optional): The maximum distance from the projected point to the original point. Defaults to float('inf').
+
+    Returns:
+        shapely.geometry.Point: The projected point on the line. If the distance is greater than the maximum distance, returns the original point.
+    """
+    projected_point = nearest_points(point, line)[1]
+
+    distance = point.distance(projected_point)
+
+    if distance <= max_distance:
+        return projected_point
+    else:
+        return point
+   
+
+def process_and_merge_osm_data(osm_df, bridge_df, bridge_location_df, max_snap_distance=10):
     """
     Processes and merges the OSM data with bridge data and bridge location data.
 
@@ -59,7 +81,11 @@ def process_and_merge_osm_data(osm_df, bridge_df, bridge_location_df):
     )
     final_df = final_df[final_df["min_distance"] == final_df["distance"]]
 
-    point_geom = final_df.geometry_bridge.snap(final_df.geometry_osm, 10)
+    # point_geom = final_df.geometry_bridge.snap(final_df.geometry_osm, 10)
+    point_geom = final_df.apply(
+        lambda row: project_point_to_line(row["geometry_bridge"], row["geometry_osm"], max_snap_distance),
+        axis=1
+    )
 
     final_point_geom = point_geom.where(point_geom != final_df.geometry_bridge, pd.NA)
     final_point_geom = final_point_geom[final_point_geom.notnull()]
