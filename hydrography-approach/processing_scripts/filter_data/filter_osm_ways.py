@@ -17,7 +17,7 @@ def convert_to_geopackage(input_file, output_file):
     subprocess.run(cmd, check=True)
 
 
-def filter_ways(input_osm_pbf, output_osm_pbf, output_gpkg):
+def filter_ways(input_osm_pbf, output_osm_pbf, output_gpkg, logger):
     """
     Perform filter operation.
     """
@@ -50,4 +50,4 @@ def filter_ways(input_osm_pbf, output_osm_pbf, output_gpkg):
     # Convert the filtered OSM PBF file to a GeoPackage
     convert_to_geopackage(output_osm_pbf, output_gpkg)
 
-    print(f"Output file: {output_gpkg} has been created successfully!")
+    logger.info(f"Output file: {output_gpkg} has been created successfully!")

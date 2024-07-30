@@ -31,7 +31,7 @@ def exclude_duplicate_bridges(df, output_duplicate_exclude_csv):
     return df
 
 
-def convert_to_gpkg(df, output_gpkg_file):
+def convert_to_gpkg(df, output_gpkg_file, logger):
     """
     Function to convert the DataFrame to a GeoPackage
     """
@@ -45,10 +45,10 @@ def convert_to_gpkg(df, output_gpkg_file):
 
     gdf.to_file(output_gpkg_file, driver="GPKG")
 
-    print(f"GeoPackage saved successfully to {output_gpkg_file}")
+    logger.info(f"GeoPackage saved successfully to {output_gpkg_file}")
 
 
-def create_nbi_geopackage(input_csv, output_duplicate_exclude_csv, output_gpkg_file):
+def create_nbi_geopackage(input_csv, output_duplicate_exclude_csv, output_gpkg_file, logger):
     """
     Funtion to perform processing of coordinates and filtering of bridges
     """
@@ -58,4 +58,4 @@ def create_nbi_geopackage(input_csv, output_duplicate_exclude_csv, output_gpkg_f
     df = exclude_duplicate_bridges(df, output_duplicate_exclude_csv)
 
     # Convert the final DataFrame to a GeoPackage file
-    convert_to_gpkg(df, output_gpkg_file)
+    convert_to_gpkg(df, output_gpkg_file, logger)

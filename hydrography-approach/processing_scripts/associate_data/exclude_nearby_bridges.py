@@ -11,7 +11,7 @@ def load_nearby_join(csv_file):
     return pd.read_csv(csv_file)
 
 
-def filter_duplicates_and_output(bridge_df, join_df, output_csv):
+def filter_duplicates_and_output(bridge_df, join_df, output_csv, logger):
     """Filter duplicates based on osm_similarity score and output filtered bridge info."""
 
     filtered_df = join_df[
@@ -38,7 +38,7 @@ def filter_duplicates_and_output(bridge_df, join_df, output_csv):
 
             except IndexError:
                 # Handle the case where ID is not found in bridge_df
-                print(f"id {sn1} or {sn2} not found in bridge_df")
+                logger.info(f"id {sn1} or {sn2} not found in bridge_df")
                 continue
 
             # Determine which ID to retain based on osm_similarity score
@@ -51,20 +51,19 @@ def filter_duplicates_and_output(bridge_df, join_df, output_csv):
         else:
             continue
 
-    # Print set of IDs that are retained
-    print("IDs to be removed:", remove_ids)
+    # logger.info("IDs to be removed:", remove_ids)
 
     # Filter bridge_df based on retain_ids and output to a new CSV
     filtered_bridge_df = bridge_df[~bridge_df["8 - Structure Number"].isin(remove_ids)]
     filtered_bridge_df.to_csv(output_csv, index=False)
 
-    print(f"Filtered bridge information saved to '{output_csv}'.")
+    logger.info(f"Filtered bridge information saved to '{output_csv}'.")
 
 
-def run(bridge_match_percentage, nearby_join_csv, final_bridges_csv):
+def run(bridge_match_percentage, nearby_join_csv, final_bridges_csv, logger):
     # Load data
     bridge_df = load_bridge_info(bridge_match_percentage)
     join_df = load_nearby_join(nearby_join_csv)
 
     # Filter duplicates based on osm_similarity score and output filtered bridge info
-    filter_duplicates_and_output(bridge_df, join_df, final_bridges_csv)
+    filter_duplicates_and_output(bridge_df, join_df, final_bridges_csv, logger)

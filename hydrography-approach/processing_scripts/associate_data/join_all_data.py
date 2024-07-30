@@ -5,7 +5,7 @@ import dask.dataframe as dd
 import pandas as pd
 
 
-def process_all_join(nbi_30_join_csv, nbi_10_join_csv, all_join_dask, all_join_csv):
+def process_all_join(nbi_30_join_csv, nbi_10_join_csv, all_join_dask, all_join_csv, logger):
     left_csv = nbi_30_join_csv
     right_csv = nbi_10_join_csv
 
@@ -61,7 +61,7 @@ def process_all_join(nbi_30_join_csv, nbi_10_join_csv, all_join_dask, all_join_c
         all_join_csv,
         index=False,
     )
-    print(f"Output file: {all_join_csv} has been created successfully!")
+    logger.info(f"Output file: {all_join_csv} has been created successfully!")
 
     # Optional: Clean up the part files
     shutil.rmtree(all_join_dask)

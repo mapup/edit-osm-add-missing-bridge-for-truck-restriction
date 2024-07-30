@@ -160,7 +160,7 @@ def merge_join_data_with_intersections(all_join_csv, intersections_csv):
     return df
 
 
-def create_intermediate_association(df, intermediate_association):
+def create_intermediate_association(df, intermediate_association, logger):
     """
     Function to create intermediate association among bridges and ways.
     """
@@ -200,12 +200,12 @@ def create_intermediate_association(df, intermediate_association):
 
     # Save intermediate results
     df.to_csv(intermediate_association)
-    print(f"\n{intermediate_association} file has been created successfully!")
+    logger.info(f"{intermediate_association} file has been created successfully!")
 
     return df
 
 
-def create_final_associations(df, association_with_intersections):
+def create_final_associations(df, association_with_intersections, logger):
     """
     Function to create final association among bridges and ways.
     """
@@ -233,12 +233,12 @@ def create_final_associations(df, association_with_intersections):
         association_with_intersections,
         index=False,
     )
-    print(f"\n{association_with_intersections} file has been created successfully!")
+    logger.info(f"{association_with_intersections} file has been created successfully!")
 
     return df
 
 
-def add_bridge_details(df, nbi_bridge_data, bridge_association_lengths):
+def add_bridge_details(df, nbi_bridge_data, bridge_association_lengths, logger):
     """
     Function to add bridge information to associated data.
     """
@@ -289,8 +289,8 @@ def add_bridge_details(df, nbi_bridge_data, bridge_association_lengths):
         bridge_association_lengths,
         index=False,
     )
-    print(
-        f"\n{bridge_association_lengths} file has been created successfully!"
+    logger.info(
+        f"{bridge_association_lengths} file has been created successfully!"
     )
 
 
@@ -300,11 +300,12 @@ def process_final_id(
     intermediate_association,
     association_with_intersections,
     nbi_bridge_data,
-    bridge_association_lengths
+    bridge_association_lengths,
+    logger
 ):
     df = merge_join_data_with_intersections(all_join_csv, intersections_csv)
-    intermediate_df = create_intermediate_association(df, intermediate_association)
+    intermediate_df = create_intermediate_association(df, intermediate_association, logger)
     final_df = create_final_associations(
-        intermediate_df, association_with_intersections
+        intermediate_df, association_with_intersections, logger
     )
-    add_bridge_details(final_df, nbi_bridge_data, bridge_association_lengths)
+    add_bridge_details(final_df, nbi_bridge_data, bridge_association_lengths, logger)

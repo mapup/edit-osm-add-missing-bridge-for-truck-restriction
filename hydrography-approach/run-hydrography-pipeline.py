@@ -1,3 +1,4 @@
+import logging
 import os
 
 import yaml
@@ -12,6 +13,14 @@ from processing_scripts.associate_data import (
 )
 from processing_scripts.filter_data import filter_osm_ways, process_filter_nbi_bridges
 from processing_scripts.tag_data import tag_nbi_and_osm_data
+
+# Initialize logging
+logging.basicConfig(
+    filename="hydrography-pipeline.log",  # Change this to the path where you want to save your log file
+    level=logging.INFO,
+    format="%(asctime)s - [%(levelname)s] - (%(filename)s).%(funcName)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 
 def load_config(state_name):
@@ -35,11 +44,11 @@ def main():
     state_name = "Kentucky"
 
     # Load config file
-    print("\nLoading the config file.")
+    logging.info("Loading the config file.")
     config = load_config(state_name)
 
     # Make the required directories for storing outputs
-    print("\nMake the required directories.")
+    logging.info("Make the required directories.")
     os.makedirs(
         config["output_data_folders"]["state_folder"],
         exist_ok=True,
@@ -53,17 +62,17 @@ def main():
     output_osm_pbf = config["output_files"]["filtered_osm_pbf"]
     output_gpkg = config["output_files"]["filtered_highways"]
 
-    print("\nFiltering OSM ways data.")
-    filter_osm_ways.filter_ways(input_osm_pbf, output_osm_pbf, output_gpkg)
+    logging.info("Filtering OSM ways data.")
+    filter_osm_ways.filter_ways(input_osm_pbf, output_osm_pbf, output_gpkg, logger)
 
     # --------------------------------------------Filter NBI data and create geopackage--------------------------------------------
     input_csv = config["input_data_folder"]["nbi_bridge_data"]
     output_duplicate_exclude_csv = config["output_files"]["duplicate_exclude_csv"]
     output_gpkg_file = config["output_files"]["nbi_geopackage"]
 
-    print("\nFiltering NBI bridge data.")
+    logging.info("Filtering NBI bridge data.")
     process_filter_nbi_bridges.create_nbi_geopackage(
-        input_csv, output_duplicate_exclude_csv, output_gpkg_file
+        input_csv, output_duplicate_exclude_csv, output_gpkg_file, logger
     )
 
     # --------------------------------------------Tag NBI data with OSM-NHD join data--------------------------------------------
@@ -86,7 +95,7 @@ def main():
     nbi_10_join_csv = config["output_files"]["nbi_10_join_csv"]
     nbi_30_join_csv = config["output_files"]["nbi_30_join_csv"]
 
-    print("\nTagging NBI and OSM data.")
+    logging.info("Tagging NBI and OSM data.")
     tag_nbi_and_osm_data.process_tagging(
         nbi_geopackage,
         filtered_highways,
@@ -107,6 +116,7 @@ def main():
         osm_nhd_join_csv,
         nbi_10_join_csv,
         nbi_30_join_csv,
+        logger
     )
 
     # --------------------------------------------Associate join data--------------------------------------------
@@ -121,12 +131,12 @@ def main():
     bridge_match_percentage = config["output_files"]["bridge_match_percentage"]
     final_bridges_csv = config["output_files"]["final_bridges_csv"]
 
-    print("\nJoining association data together.")
+    logging.info("Joining association data together.")
     join_all_data.process_all_join(
-        nbi_30_join_csv, nbi_10_join_csv, all_join_dask, all_join_csv
+        nbi_30_join_csv, nbi_10_join_csv, all_join_dask, all_join_csv, logger
     )
 
-    print("\nDetermining final OSM way ID for each NBI bridge.")
+    logging.info("Determining final OSM way ID for each NBI bridge.")
     determine_final_osm_id.process_final_id(
         all_join_csv,
         intersections_csv,
@@ -134,9 +144,10 @@ def main():
         association_with_intersections,
         input_csv,
         bridge_association_lengths,
+        logger,
     )
 
-    print("\nGetting NBI point projections on associated ways.")
+    logging.info("Getting NBI point projections on associated ways.")
     get_point_projections_on_ways.run(
         final_bridges,
         filtered_highways,
@@ -144,15 +155,16 @@ def main():
         bridge_with_proj_points,
     )
 
-    print("\nCalculating fuzzy match for OSM road name.")
+    logging.info("Calculating fuzzy match for OSM road name.")
     calculate_match_percentage.run(bridge_with_proj_points, bridge_match_percentage)
 
-    print("\nExcluding nearby bridges.")
+    logging.info("Excluding nearby bridges.")
     exclude_nearby_bridges.run(
-        bridge_match_percentage, nearby_join_csv, final_bridges_csv
+        bridge_match_percentage, nearby_join_csv, final_bridges_csv, logger
     )
 
-    print("\nProcess completed.")
+    logging.info("Association process completed.")
+
 
 if __name__ == "__main__":
     main()
