@@ -9,11 +9,14 @@ BRIDGE_LAYER = "kentucky_bridges.gpkg"
 ROAD_LAYER = "kentucky_roads.gpkg"
 INTERPOLATED_BRIDGE_OUTPUT = "interpolated_bridge.gpkg"
 INTERPOLATED_ROAD_OUTPUT = "interpolated_road.gpkg"
+ROAD_WITH_UNIQUE_ID_OUTPUT = "ky_roads_with_unique_id.gpkg"
 CRS_EPSG_4326 = "EPSG:4326"
 CRS_EPSG_3857 = "EPSG:3857"
 CRS_EPSG_6473 = "EPSG:6473"
 
-def read_and_clean_road_df():
+
+
+def read_and_clean_road_df(save_road_with_unique_id=False):
     """
     Reads and cleans the road data from the specified GeoPackage file.
 
@@ -21,6 +24,12 @@ def read_and_clean_road_df():
         GeoDataFrame: Cleaned road data with selected columns renamed.
     """
     road_df = gpd.read_file(ROAD_LAYER, engine="pyogrio", use_arrow=True)
+    road_df["created_unique_id"]=road_df.index
+
+    #Save road data with "created_unique_id" if save_road_with_unique_id is True
+    if save_road_with_unique_id:
+        (gpd.GeoDataFrame(road_df.copy()).to_crs(epsg=CRS_EPSG_3857.split(':')[-1])).to_file(ROAD_WITH_UNIQUE_ID_OUTPUT, driver="GPKG")
+    
     road_association = {
         "RT_UNIQUE": "rt_unique",
         "LRS_ID": "lrs_id",
@@ -31,6 +40,7 @@ def read_and_clean_road_df():
         "geometry": "geometry",
         "DMI_LEN_MI": "dmi_len_mi",
         "GRAPHIC_LE": "graphic_le",
+        "created_unique_id": "created_unique_id"
     }
     road_df = road_df[list(road_association.keys())].rename(columns=road_association)
     return road_df
@@ -52,7 +62,7 @@ def read_and_clean_bridge_df():
         "FACILITY_7": "feature_over_bridge",
         "LOCATION": "bridge_location_desc",
         "geometry": "geometry",
-        "OBJECTID": "object_id",
+        "OBJECTID": "object_id"
     }
     bridge_df = bridge_df[list(bridge_association.keys())].rename(
         columns=bridge_association
@@ -325,9 +335,13 @@ def export_geodataframes(joined_df):
             "end_mp",
             "bridge_point",
             "object_id",
+            "rd_name",
+            "created_unique_id"
         ]
     ]
-    road_filtered.rename(columns={"road_segment": "geometry"}, inplace=True)
+    road_filtered.rename(columns={"road_segment": "geometry"},inplace=True)
+    road_filtered.rename(columns={"rd_name":"state_rd_name"},inplace=True)
+
     road_filtered.set_geometry(road_filtered["geometry"])
     gpd.GeoDataFrame(road_filtered).to_file(INTERPOLATED_ROAD_OUTPUT, driver="GPKG")
 
@@ -335,7 +349,7 @@ def main():
     """
     Main function to execute the processing pipeline.
     """
-    road_df = read_and_clean_road_df()
+    road_df = read_and_clean_road_df(save_road_with_unique_id=True)
     bridge_df = read_and_clean_bridge_df()
     joined_df = merge_road_and_bridge_dfs(road_df, bridge_df)
     joined_df = process_joined_df(joined_df)
