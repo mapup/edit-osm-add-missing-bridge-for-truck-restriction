@@ -15,16 +15,7 @@ from processing_scripts.associate_data import (
 from processing_scripts.filter_data import filter_osm_ways, process_filter_nbi_bridges
 from processing_scripts.tag_data import tag_nbi_and_osm_data
 
-# Initialize logging
-log_file_path = os.getenv('log_file_path')
-
-# Configure logging
-logging.basicConfig(
-    filename=log_file_path,  # Use the path from the environment variable
-    level=logging.INFO,
-    format="%(asctime)s - [%(levelname)s] - (%(filename)s).%(funcName)s - %(message)s",
-)
-
+# Initialize global logger
 logger = logging.getLogger(__name__)
 
 
@@ -181,8 +172,17 @@ def main() -> None:
 
     try:
         # Load configuration
-        logger.info("Loading the config file.")
         config = load_config(state_name)
+
+        # Configure logging after loading config
+        log_file_path = config["logging"].get(
+            "log_file_path", "hydrography-pipeline.log"
+        )
+        logging.basicConfig(
+            filename=log_file_path,  # Use the path from the configuration
+            level=logging.INFO,
+            format="%(asctime)s - [%(levelname)s] - (%(filename)s).%(funcName)s - %(message)s",
+        )
 
         # Create directories
         logger.info("Creating directories.")
