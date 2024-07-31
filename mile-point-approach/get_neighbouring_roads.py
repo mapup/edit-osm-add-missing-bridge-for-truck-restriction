@@ -1,0 +1,246 @@
+
+import geopandas as gpd
+import pandas as pd
+from enum import Enum, auto
+from typing import List
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+class CRS(Enum):
+    """Enum for Coordinate Reference Systems."""
+    EPSG_3857 = "EPSG:3857"
+
+class BufferDistance(Enum):
+    """Enum for buffer distances."""
+    BRIDGE_POINT = 15
+    ROAD = 5
+
+class FilePath(Enum):
+    """Enum for file paths."""
+    OSM_ROAD_POINTS = "osm_road_points.gpkg"
+    STATE_ROAD = "ky-roads-with-unique-id.gpkg"
+
+class SpatialPredicate(Enum):
+    """Enum for spatial join predicates."""
+    INTERSECTS = "intersects"
+    OVERLAPS = "overlaps"
+    CONTAINS = "contains"
+    WITHIN = "within"
+
+class OutputControl(Enum):
+    """Enum for output control flags."""
+    SAVE_INTERMEDIATE_GEOPACKAGES = True
+
+class GeoprocessingError(Exception):
+    """Custom exception for geoprocessing errors."""
+    pass
+
+def read_geopackage(file_path: str) -> gpd.GeoDataFrame:
+    """
+    Read a GeoPackage file and return a GeoDataFrame.
+
+    Args:
+        file_path (str): Path to the GeoPackage file.
+
+    Returns:
+        gpd.GeoDataFrame: The read GeoDataFrame.
+
+    Raises:
+        GeoprocessingError: If there's an error reading the file.
+    """
+    try:
+        return gpd.read_file(file_path, engine="pyogrio", use_arrow=True)
+    except Exception as e:
+        logger.error(f"Error reading file {file_path}: {str(e)}")
+        raise GeoprocessingError(f"Failed to read GeoPackage: {file_path}") from e
+
+def transform_crs(gdf: gpd.GeoDataFrame, target_crs: CRS) -> gpd.GeoDataFrame:
+    """
+    Transform the CRS of a GeoDataFrame if it doesn't match the target CRS.
+
+    Args:
+        gdf (gpd.GeoDataFrame): Input GeoDataFrame.
+        target_crs (CRS): Target CRS.
+
+    Returns:
+        gpd.GeoDataFrame: GeoDataFrame with transformed CRS.
+
+    Raises:
+        GeoprocessingError: If there's an error during CRS transformation.
+    """
+    try:
+        if gdf.crs != target_crs.value:
+            return gdf.to_crs(epsg=target_crs.value.split(":")[1])
+        return gdf
+    except Exception as e:
+        logger.error(f"Error transforming CRS to {target_crs.value}: {str(e)}")
+        raise GeoprocessingError("Failed to transform CRS") from e
+
+def create_buffer(gdf: gpd.GeoDataFrame, buffer_distance: BufferDistance) -> gpd.GeoDataFrame:
+    """
+    Create a buffer around geometries in a GeoDataFrame.
+
+    Args:
+        gdf (gpd.GeoDataFrame): Input GeoDataFrame.
+        buffer_distance (BufferDistance): Buffer distance enum.
+
+    Returns:
+        gpd.GeoDataFrame: GeoDataFrame with buffered geometries.
+
+    Raises:
+        GeoprocessingError: If there's an error creating the buffer.
+    """
+    try:
+        buffered = gdf.copy()
+        buffered['geometry'] = gdf.buffer(buffer_distance.value)
+        return buffered
+    except Exception as e:
+        logger.error(f"Error creating buffer: {str(e)}")
+        raise GeoprocessingError("Failed to create buffer") from e
+
+def perform_spatial_join(left_gdf: gpd.GeoDataFrame, right_gdf: gpd.GeoDataFrame, 
+                         predicates: List[SpatialPredicate]) -> gpd.GeoDataFrame:
+    """
+    Perform spatial joins with multiple predicates and combine results.
+
+    Args:
+        left_gdf (gpd.GeoDataFrame): Left GeoDataFrame for join.
+        right_gdf (gpd.GeoDataFrame): Right GeoDataFrame for join.
+        predicates (List[SpatialPredicate]): List of spatial predicates to use.
+
+    Returns:
+        gpd.GeoDataFrame: Combined result of spatial joins.
+
+    Raises:
+        GeoprocessingError: If there's an error during spatial join.
+    """
+    try:
+        joins = [gpd.sjoin(left_gdf, right_gdf, how='inner', predicate=pred.value) for pred in predicates]
+        combined = pd.concat(joins)
+        return combined.drop_duplicates()
+    except Exception as e:
+        logger.error(f"Error performing spatial join: {str(e)}")
+        raise GeoprocessingError("Failed to perform spatial join") from e
+
+def group_and_aggregate(df: pd.DataFrame) -> gpd.GeoDataFrame:
+    """
+    Group by geometry and aggregate specified columns.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame.
+
+    Returns:
+        gpd.GeoDataFrame: Grouped and aggregated GeoDataFrame.
+
+    Raises:
+        GeoprocessingError: If there's an error during grouping and aggregation.
+    """
+    try:
+        grouped = df.groupby(['geometry', 'created_unique_id_1_left', 'bridge_id_left']).agg({
+            'created_unique_id_1_right': lambda x: ', '.join(x.astype(str)),
+            'RD_NAME_right': lambda x: ', '.join(x.astype(str)),
+        }).reset_index()
+        return gpd.GeoDataFrame(grouped, geometry='geometry', crs=df.crs)
+    except Exception as e:
+        logger.error(f"Error grouping and aggregating data: {str(e)}")
+        raise GeoprocessingError("Failed to group and aggregate data") from e
+
+def save_geopackage(gdf: gpd.GeoDataFrame, file_path: str):
+    """
+    Save a GeoDataFrame to a GeoPackage file if SAVE_INTERMEDIATE_GEOPACKAGES is True.
+
+    Args:
+        gdf (gpd.GeoDataFrame): GeoDataFrame to save.
+        file_path (str): Path to save the GeoPackage.
+
+    Raises:
+        GeoprocessingError: If there's an error saving the GeoPackage.
+    """
+    if OutputControl.SAVE_INTERMEDIATE_GEOPACKAGES.value:
+        try:
+            gdf.to_file(file_path, driver="GPKG")
+            logger.info(f"Saved GeoPackage: {file_path}")
+        except Exception as e:
+            logger.error(f"Error saving GeoPackage {file_path}: {str(e)}")
+            raise GeoprocessingError(f"Failed to save GeoPackage: {file_path}") from e
+
+def save_csv(df: pd.DataFrame, file_path: str):
+    """
+    Save a DataFrame to a CSV file.
+
+    Args:
+        df (pd.DataFrame): DataFrame to save.
+        file_path (str): Path to save the CSV.
+
+    Raises:
+        GeoprocessingError: If there's an error saving the CSV.
+    """
+    try:
+        df.to_csv(file_path, index=False)
+        logger.info(f"Saved CSV: {file_path}")
+    except Exception as e:
+        logger.error(f"Error saving CSV {file_path}: {str(e)}")
+        raise GeoprocessingError(f"Failed to save CSV: {file_path}") from e
+
+def main():
+    try:
+        # Read GeoPackage files
+        osm_road_points = read_geopackage(FilePath.OSM_ROAD_POINTS.value)
+        state_road = read_geopackage(FilePath.STATE_ROAD.value)
+
+        logger.info(f"OSM Road Points CRS: {osm_road_points.crs}")
+        logger.info(f"State Road CRS: {state_road.crs}")
+
+        # Transform CRS
+        state_road = transform_crs(state_road, CRS.EPSG_3857)
+        osm_road_points = transform_crs(osm_road_points, CRS.EPSG_3857)
+
+        # Create buffers
+        osm_road_points_buffer = create_buffer(osm_road_points, BufferDistance.BRIDGE_POINT)
+        
+        # Perform intersection
+        roads_within_buffer = gpd.overlay(state_road, osm_road_points_buffer, how='intersection')
+
+        # Filter roads
+        filtered_roads = roads_within_buffer[roads_within_buffer['created_unique_id_1'] == roads_within_buffer['created_unique_id_2']]
+        filtered_roads_buffer = create_buffer(filtered_roads, BufferDistance.ROAD)
+
+        # Save intermediate results
+        save_geopackage(roads_within_buffer, "roads_within_buffer.gpkg")
+        save_geopackage(filtered_roads, "filtered_roads_within_buffer.gpkg")
+        save_geopackage(filtered_roads_buffer, "filtered_roads_buffer_5m.gpkg")
+
+        # Perform spatial joins
+        joined = perform_spatial_join(filtered_roads_buffer, roads_within_buffer, 
+                                      [SpatialPredicate.INTERSECTS, SpatialPredicate.OVERLAPS, 
+                                       SpatialPredicate.CONTAINS, SpatialPredicate.WITHIN])
+
+        # Save joined result
+        save_geopackage(joined, "joined_roads.gpkg")
+
+        # Group and aggregate
+        grouped_gpd = group_and_aggregate(joined)
+
+        # Prepare final DataFrame for CSV
+        final_df = grouped_gpd.drop(columns='geometry').rename(columns={
+            "created_unique_id_1_left": "created_unique_id",
+            'bridge_id_left': 'bridge_id',
+            'created_unique_id_1_right': 'neighbouring_ids',
+            'RD_NAME_right': 'neighbouring_roads'
+        })
+
+        # Save final results as CSV (always generated)
+        save_csv(final_df, "grouped_roads.csv")
+
+        logger.info("Geospatial analysis completed successfully.")
+
+    except GeoprocessingError as e:
+        logger.error(f"Geoprocessing error: {str(e)}")
+    except Exception as e:
+        logger.error(f"An unexpected error occurred: {str(e)}")
+
+if __name__ == "__main__":
+    main()
