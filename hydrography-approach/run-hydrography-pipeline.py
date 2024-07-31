@@ -1,5 +1,6 @@
 import logging
 import os
+from typing import Dict
 
 import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -15,17 +16,21 @@ from processing_scripts.filter_data import filter_osm_ways, process_filter_nbi_b
 from processing_scripts.tag_data import tag_nbi_and_osm_data
 
 # Initialize logging
+log_file_path = os.getenv('log_file_path')
+
+# Configure logging
 logging.basicConfig(
-    filename="hydrography-pipeline.log",  # Change this to the path where you want to save your log file
+    filename=log_file_path,  # Use the path from the environment variable
     level=logging.INFO,
     format="%(asctime)s - [%(levelname)s] - (%(filename)s).%(funcName)s - %(message)s",
 )
+
 logger = logging.getLogger(__name__)
 
 
-def load_config(state_name):
+def load_config(state_name: str) -> Dict:
     """
-    Load configuration
+    Load and render configuration from a YAML file.
     """
     env = Environment(
         loader=FileSystemLoader("."), autoescape=select_autoescape(["yaml"])
@@ -33,138 +38,181 @@ def load_config(state_name):
 
     with open("config.yml", "r") as file:
         template = env.from_string(file.read())
-        rendered_yaml = template.render(state=f"{state_name}")
+        rendered_yaml = template.render(state=state_name)
         config = yaml.safe_load(rendered_yaml)
 
     return config
 
 
-def main():
-    # Mention state to process
-    state_name = "Kentucky"
+def create_directories(config: Dict) -> None:
+    """
+    Create directories for output data as specified in the configuration.
+    """
+    output_folders = config["output_data_folders"]
+    for folder in ["state_folder", "csv_files", "gpkg_files", "pbf_files"]:
+        os.makedirs(output_folders[folder], exist_ok=True)
+    logger.info("Directories created.")
 
-    # Load config file
-    logging.info("Loading the config file.")
-    config = load_config(state_name)
 
-    # Make the required directories for storing outputs
-    logging.info("Make the required directories.")
-    os.makedirs(
-        config["output_data_folders"]["state_folder"],
-        exist_ok=True,
-    )
-    os.makedirs(config["output_data_folders"]["csv_files"], exist_ok=True)
-    os.makedirs(config["output_data_folders"]["gpkg_files"], exist_ok=True)
-    os.makedirs(config["output_data_folders"]["pbf_files"], exist_ok=True)
-
-    # --------------------------------------------Filter OSM ways data--------------------------------------------
+def filter_osm_data(config: Dict) -> None:
+    """
+    Filter OSM ways data using the provided configuration.
+    """
     input_osm_pbf = config["input_data_folder"]["state_latest_osm"]
     output_osm_pbf = config["output_files"]["filtered_osm_pbf"]
     output_gpkg = config["output_files"]["filtered_highways"]
 
-    logging.info("Filtering OSM ways data.")
+    logger.info("Filtering OSM ways data.")
     filter_osm_ways.filter_ways(input_osm_pbf, output_osm_pbf, output_gpkg, logger)
 
-    # --------------------------------------------Filter NBI data and create geopackage--------------------------------------------
+
+def filter_nbi_data(config: Dict) -> None:
+    """
+    Filter NBI bridge data and create a GeoPackage.
+    """
     input_csv = config["input_data_folder"]["nbi_bridge_data"]
     output_duplicate_exclude_csv = config["output_files"]["duplicate_exclude_csv"]
     output_gpkg_file = config["output_files"]["nbi_geopackage"]
 
-    logging.info("Filtering NBI bridge data.")
+    logger.info("Filtering NBI bridge data.")
     process_filter_nbi_bridges.create_nbi_geopackage(
         input_csv, output_duplicate_exclude_csv, output_gpkg_file, logger
     )
 
-    # --------------------------------------------Tag NBI data with OSM-NHD join data--------------------------------------------
-    nbi_geopackage = config["output_files"]["nbi_geopackage"]
-    filtered_highways = config["output_files"]["filtered_highways"]
-    state_latest_osm = config["input_data_folder"]["state_latest_osm"]
-    bridge_yes_join_csv = config["output_files"]["bridge_yes_join_csv"]
-    yes_filter_bridges = config["output_files"]["yes_filter_bridges"]
-    manmade_join_csv = config["output_files"]["manmade_join_csv"]
-    manmade_filter_bridges = config["output_files"]["manmade_filter_bridges"]
-    parallel_join_csv = config["output_files"]["parallel_join_csv"]
-    parallel_filter_bridges = config["output_files"]["parallel_filter_bridges"]
-    nearby_join_csv = config["output_files"]["nearby_join_csv"]
-    state_folder = config["output_data_folders"]["state_folder"]
-    culvert_join_csv = config["output_files"]["culvert_join_csv"]
-    final_bridges = config["output_files"]["final_bridges"]
-    rivers_data = config["input_data_folder"]["nhd_streams_flowline"]
-    intersections_csv = config["output_files"]["intersections_csv"]
-    osm_nhd_join_csv = config["output_files"]["osm_nhd_join_csv"]
-    nbi_10_join_csv = config["output_files"]["nbi_10_join_csv"]
-    nbi_30_join_csv = config["output_files"]["nbi_30_join_csv"]
 
-    logging.info("Tagging NBI and OSM data.")
+def tag_data(config: Dict, state_name: str) -> None:
+    """
+    Tag NBI data with OSM-NHD join data.
+    """
+    # Extract file paths from config
+    file_paths = {
+        "nbi_geopackage": config["output_files"]["nbi_geopackage"],
+        "filtered_highways": config["output_files"]["filtered_highways"],
+        "state_latest_osm": config["input_data_folder"]["state_latest_osm"],
+        "bridge_yes_join_csv": config["output_files"]["bridge_yes_join_csv"],
+        "yes_filter_bridges": config["output_files"]["yes_filter_bridges"],
+        "manmade_join_csv": config["output_files"]["manmade_join_csv"],
+        "manmade_filter_bridges": config["output_files"]["manmade_filter_bridges"],
+        "parallel_join_csv": config["output_files"]["parallel_join_csv"],
+        "parallel_filter_bridges": config["output_files"]["parallel_filter_bridges"],
+        "nearby_join_csv": config["output_files"]["nearby_join_csv"],
+        "state_folder": config["output_data_folders"]["state_folder"],
+        "culvert_join_csv": config["output_files"]["culvert_join_csv"],
+        "final_bridges": config["output_files"]["final_bridges"],
+        "rivers_data": config["input_data_folder"]["nhd_streams_flowline"],
+        "intersections_csv": config["output_files"]["intersections_csv"],
+        "osm_nhd_join_csv": config["output_files"]["osm_nhd_join_csv"],
+        "nbi_10_join_csv": config["output_files"]["nbi_10_join_csv"],
+        "nbi_30_join_csv": config["output_files"]["nbi_30_join_csv"],
+    }
+
+    logger.info("Tagging NBI and OSM data.")
     tag_nbi_and_osm_data.process_tagging(
-        nbi_geopackage,
-        filtered_highways,
-        state_latest_osm,
-        bridge_yes_join_csv,
-        yes_filter_bridges,
-        manmade_join_csv,
-        manmade_filter_bridges,
-        parallel_join_csv,
-        parallel_filter_bridges,
-        nearby_join_csv,
-        state_folder,
-        state_name,
-        culvert_join_csv,
-        final_bridges,
-        rivers_data,
-        intersections_csv,
-        osm_nhd_join_csv,
-        nbi_10_join_csv,
-        nbi_30_join_csv,
-        logger
+        **file_paths, logger=logger, state_name=state_name
     )
 
-    # --------------------------------------------Associate join data--------------------------------------------
-    all_join_dask = config["output_files"]["all_join_dask"]
-    all_join_csv = config["output_files"]["all_join_csv"]
-    intermediate_association = config["output_files"]["intermediate_association"]
-    association_with_intersections = config["output_files"][
-        "association_with_intersections"
-    ]
-    bridge_association_lengths = config["output_files"]["bridge_association_lengths"]
-    bridge_with_proj_points = config["output_files"]["bridge_with_proj_points"]
-    bridge_match_percentage = config["output_files"]["bridge_match_percentage"]
-    final_bridges_csv = config["output_files"]["final_bridges_csv"]
 
-    logging.info("Joining association data together.")
+def associate_join_data(config: Dict) -> None:
+    """
+    Associate and process join data.
+    """
+    files = {
+        "all_join_dask": config["output_files"]["all_join_dask"],
+        "all_join_csv": config["output_files"]["all_join_csv"],
+        "intermediate_association": config["output_files"]["intermediate_association"],
+        "association_with_intersections": config["output_files"][
+            "association_with_intersections"
+        ],
+        "bridge_association_lengths": config["output_files"][
+            "bridge_association_lengths"
+        ],
+        "bridge_with_proj_points": config["output_files"]["bridge_with_proj_points"],
+        "bridge_match_percentage": config["output_files"]["bridge_match_percentage"],
+        "final_bridges_csv": config["output_files"]["final_bridges_csv"],
+    }
+
+    logger.info("Joining association data together.")
     join_all_data.process_all_join(
-        nbi_30_join_csv, nbi_10_join_csv, all_join_dask, all_join_csv, logger
-    )
-
-    logging.info("Determining final OSM way ID for each NBI bridge.")
-    determine_final_osm_id.process_final_id(
-        all_join_csv,
-        intersections_csv,
-        intermediate_association,
-        association_with_intersections,
-        input_csv,
-        bridge_association_lengths,
+        config["output_files"]["nbi_30_join_csv"],
+        config["output_files"]["nbi_10_join_csv"],
+        files["all_join_dask"],
+        files["all_join_csv"],
         logger,
     )
 
-    logging.info("Getting NBI point projections on associated ways.")
+    logger.info("Determining final OSM way ID for each NBI bridge.")
+    determine_final_osm_id.process_final_id(
+        files["all_join_csv"],
+        config["output_files"]["intersections_csv"],
+        files["intermediate_association"],
+        files["association_with_intersections"],
+        config["input_data_folder"]["nbi_bridge_data"],
+        files["bridge_association_lengths"],
+        logger,
+    )
+
+    logger.info("Getting NBI point projections on associated ways.")
     get_point_projections_on_ways.run(
-        final_bridges,
-        filtered_highways,
-        bridge_association_lengths,
-        bridge_with_proj_points,
+        config["output_files"]["final_bridges"],
+        config["output_files"]["filtered_highways"],
+        files["bridge_association_lengths"],
+        files["bridge_with_proj_points"],
     )
 
-    logging.info("Calculating fuzzy match for OSM road name.")
-    calculate_match_percentage.run(bridge_with_proj_points, bridge_match_percentage)
+    logger.info("Calculating fuzzy match for OSM road name.")
+    calculate_match_percentage.run(
+        files["bridge_with_proj_points"], files["bridge_match_percentage"]
+    )
 
-    logging.info("Excluding nearby bridges.")
+    logger.info("Excluding nearby bridges.")
     exclude_nearby_bridges.run(
-        bridge_match_percentage, nearby_join_csv, final_bridges_csv, logger
+        files["bridge_match_percentage"],
+        config["output_files"]["nearby_join_csv"],
+        files["final_bridges_csv"],
+        logger,
     )
 
-    logging.info("Association process completed.")
+
+def main() -> None:
+    """
+    Main function to orchestrate the data processing pipeline.
+    """
+    state_name = "Kentucky"
+
+    try:
+        # Load configuration
+        logger.info("Loading the config file.")
+        config = load_config(state_name)
+
+        # Create directories
+        logger.info("Creating directories.")
+        create_directories(config)
+
+        # Filter OSM & NBI data
+        filter_osm_data(config)
+        filter_nbi_data(config)
+
+        # Tag NBI and OSM data
+        tag_data(config, state_name)
+
+        # Associate and process join data
+        associate_join_data(config)
+        logger.info("Association process completed.")
+
+    except FileNotFoundError as e:
+        logger.error(f"File not found: {e}", exc_info=True)
+    except yaml.YAMLError as e:
+        logger.error(f"YAML configuration error: {e}", exc_info=True)
+    except KeyError as e:
+        logger.error(f"Missing key in configuration or data: {e}", exc_info=True)
+    except Exception as e:
+        logger.error(f"An unexpected error occurred: {e}", exc_info=True)
+        raise  # Re-raise the exception to ensure the program terminates with an error status
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        logger.error(f"An error occurred: {e}", exc_info=True)
+        raise

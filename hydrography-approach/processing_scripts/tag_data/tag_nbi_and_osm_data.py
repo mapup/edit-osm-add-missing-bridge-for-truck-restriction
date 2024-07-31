@@ -616,7 +616,6 @@ def process_tagging(
     parallel_filter_bridges,
     nearby_join_csv,
     state_folder,
-    state_name,
     culvert_join_csv,
     final_bridges,
     rivers_data,
@@ -625,6 +624,7 @@ def process_tagging(
     nbi_10_join_csv,
     nbi_30_join_csv,
     logger,
+    state_name,
 ):
     # Get QGIS pathname for NBI points vector layer
     base_filename = os.path.splitext(os.path.basename(nbi_geopackage))[0]
