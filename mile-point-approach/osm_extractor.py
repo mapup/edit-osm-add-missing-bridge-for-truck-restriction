@@ -5,7 +5,7 @@ import geopandas as gpd
 import pandas as pd
 
 # Constants for file paths
-BRIDGE_LINK_LAYER = "nterpolated_road.gpkg"
+BRIDGE_LINK_LAYER = "interpolated_road.gpkg"
 OSM_SHAPE_FILE_LAYER = "gis_osm_roads_free_1.shp"
 BRIDGE_LOCATIONS_LAYER = "interpolated_bridge.gpkg"
 OUTPUT_OSM_LINKS_GPKG = "osm_road_raw.gpkg"
@@ -23,8 +23,13 @@ def load_data(file_path, crs: int = 3857) -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: Loaded and converted GeoDataFrame.
     """
+    if not file_path:
+        raise ValueError("The file path cannot be empty.")
     df = gpd.read_file(file_path, engine="pyogrio", use_arrow=True)
-    return df.to_crs(crs)
+    try:
+        return df.to_crs(crs)
+    except Exception as e:
+        raise ValueError(f"Failed to convert CRS: {str(e)}")
 
 
 def prepare_bridge_data(bridge_df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -64,7 +69,7 @@ def load_and_prepare_data() -> (
 
 
 def project_point_to_line(
-    point: Point, line: LineString, max_distance: float = float("inf")
+    point: Point, line: LineString, max_distance: float = 1000.0
 ) -> Point:
     """
     Project a point perpendicularly onto a line.
@@ -84,7 +89,7 @@ def project_point_to_line(
     if not isinstance(point, base.BaseGeometry) or not isinstance(
         line, base.BaseGeometry
     ):
-        raise TypeError("Inputs must be Shapely geometry objects")
+        raise TypeError(f"Expected a Shapely geometry object, got {type(point)} and type {type(line)} instead.")
 
     try:
         projected_point = nearest_points(point, line)[1]
@@ -93,7 +98,6 @@ def project_point_to_line(
         return projected_point if distance <= max_distance else point
     except Exception as e:
         raise ValueError(f"Error in geometric operations: {str(e)}")
-
 
 def process_and_merge_osm_data(
     osm_df: gpd.GeoDataFrame,
@@ -223,10 +227,17 @@ def save_results(final_df: gpd.GeoDataFrame, point_geom: gpd.GeoSeries) -> None:
 
     try:
         osm_points.to_file(OUTPUT_OSM_POINTS_GPKG)
-        final_df.to_file(OUTPUT_OSM_LINKS_GPKG)
+    except (IOError, OSError) as e:
+        print(f"Error saving OSM points: {str(e)}")
     except Exception as e:
-        print(f"Error saving results: {str(e)}")
+        print(f"Unexpected error saving OSM points: {str(e)}")
 
+    try:
+        final_df.to_file(OUTPUT_OSM_LINKS_GPKG)
+    except (IOError, OSError) as e:
+        print(f"Error saving OSM roads: {str(e)}")
+    except Exception as e:
+        print(f"Unexpected error saving OSM roads: {str(e)}")
 
 def main():
     """
