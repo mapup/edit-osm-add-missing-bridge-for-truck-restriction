@@ -2,7 +2,7 @@ dask==2024.7.0
 fuzzywuzzy==0.18.0
 geographiclib==2.0
 geopandas==1.0.1
-Jinja2==3.1.2
+Jinja2==3.1.4
 networkx==3.3
 numpy==1.24.3
 osmium==3.7.0
