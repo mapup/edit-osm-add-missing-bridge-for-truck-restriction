@@ -1,7 +1,7 @@
 import logging
 import os
 from typing import Dict
-
+import sys
 import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -23,16 +23,29 @@ def load_config(state_name: str) -> Dict:
     """
     Load and render configuration from a YAML file.
     """
-    env = Environment(
-        loader=FileSystemLoader("."), autoescape=select_autoescape(["yaml"])
-    )
+    try:
+        env = Environment(
+            loader=FileSystemLoader("."), autoescape=select_autoescape(["yaml"])
+        )
 
-    with open("config.yml", "r") as file:
-        template = env.from_string(file.read())
-        rendered_yaml = template.render(state=state_name)
-        config = yaml.safe_load(rendered_yaml)
+        with open("config.yml", "r") as file:
+            template = env.from_string(file.read())
+            rendered_yaml = template.render(state=state_name)
+            config = yaml.safe_load(rendered_yaml)
 
-    return config
+        return config
+
+    except FileNotFoundError as e:
+        print(f"Error: The configuration file was not found. Details: {e}")
+        raise
+
+    except yaml.YAMLError as e:
+        print(f"Error: Failed to parse the YAML configuration. Details: {e}")
+        raise
+
+    except Exception as e:
+        print(f"An unexpected error occurred while loading the configuration. Details: {e}")
+        raise
 
 
 def create_directories(config: Dict) -> None:
@@ -174,6 +187,11 @@ def main() -> None:
         # Load configuration
         config = load_config(state_name)
 
+    except (FileNotFoundError, yaml.YAMLError, Exception) as e:
+        print(f"Configuration loading failed: {e}")
+        sys.exit(1)  # Exit with a non-zero status to indicate an error
+
+    try:
         # Configure logging after loading config
         log_file_path = config["logging"].get(
             "log_file_path", "hydrography-pipeline.log"
