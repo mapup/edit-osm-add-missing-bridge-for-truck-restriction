@@ -48,14 +48,30 @@ def load_config(state_name: str) -> Dict:
         raise
 
 
-def create_directories(config: Dict) -> None:
+def create_directories(config: Dict[str, str]) -> None:
     """
     Create directories for output data as specified in the configuration.
+    
+    :param config: Dictionary containing paths for directories to be created.
     """
-    output_folders = config["output_data_folders"]
-    for folder in ["state_folder", "csv_files", "gpkg_files", "pbf_files"]:
-        os.makedirs(output_folders[folder], exist_ok=True)
-    logger.info("Directories created.")
+    output_folders = config.get("output_data_folders", {})
+
+    # Define required folder keys
+    required_folders = ["state_folder", "csv_files", "gpkg_files", "pbf_files"]
+
+    for folder in required_folders:
+        folder_path = output_folders.get(folder)
+        if folder_path:
+            if not os.path.exists(folder_path):
+                try:
+                    os.makedirs(folder_path)
+                    logger.info(f"Directory created: {folder_path}")
+                except Exception as e:
+                    logger.error(f"Failed to create directory {folder_path}: {e}")
+            else:
+                logger.info(f"Directory already exists: {folder_path}")
+        else:
+            logger.warning(f"Path for {folder} not specified in configuration.")
 
 
 def filter_osm_data(config: Dict) -> None:
