@@ -1,7 +1,7 @@
 
 import geopandas as gpd
 import pandas as pd
-from enum import Enum, auto
+from enum import Enum
 from typing import List,Dict
 import logging
 import pyproj
@@ -271,7 +271,7 @@ def main():
         })
 
         # Save final results as CSV (always generated)
-        save_csv(final_df, "grouped_roads.csv")
+        save_csv(final_df, "grouped_neighbouring_roads.csv")
 
         logger.info("Geospatial analysis completed successfully.")
 
