@@ -269,6 +269,9 @@ def main():
             'created_unique_id_1_right': 'neighbouring_ids',
             'RD_NAME_right': 'neighbouring_roads'
         })
+        
+        #Add osm ids in final_df
+        final_df=final_df.merge(osm_road_points[["osm_id","created_unique_id"]], on='created_unique_id', how='left')
 
         # Save final results as CSV (always generated)
         save_csv(final_df, "grouped_neighbouring_roads.csv")
