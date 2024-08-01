@@ -2,8 +2,10 @@
 import geopandas as gpd
 import pandas as pd
 from enum import Enum, auto
-from typing import List
+from typing import List,Dict
 import logging
+import pyproj
+import fiona
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -38,6 +40,26 @@ class GeoprocessingError(Exception):
     """Custom exception for geoprocessing errors."""
     pass
 
+class FileReadError(GeoprocessingError):
+    """Exception raised when there's an error reading a file."""
+    pass
+
+class CRSTransformError(GeoprocessingError):
+    """Exception raised when there's an error transforming CRS."""
+    pass
+
+class BufferCreationError(GeoprocessingError):
+    """Exception raised when there's an error creating a buffer."""
+    pass
+
+class SpatialJoinError(GeoprocessingError):
+    """Exception raised when there's an error performing a spatial join."""
+    pass
+
+class GroupingError(GeoprocessingError):
+    """Exception raised when there's an error during the grouping operation."""
+    pass
+
 def read_geopackage(file_path: str) -> gpd.GeoDataFrame:
     """
     Read a GeoPackage file and return a GeoDataFrame.
@@ -49,13 +71,13 @@ def read_geopackage(file_path: str) -> gpd.GeoDataFrame:
         gpd.GeoDataFrame: The read GeoDataFrame.
 
     Raises:
-        GeoprocessingError: If there's an error reading the file.
+        FileReadError: If there's an error reading the file.
     """
     try:
         return gpd.read_file(file_path, engine="pyogrio", use_arrow=True)
     except Exception as e:
         logger.error(f"Error reading file {file_path}: {str(e)}")
-        raise GeoprocessingError(f"Failed to read GeoPackage: {file_path}") from e
+        raise FileReadError(f"Failed to read GeoPackage: {file_path}") from e
 
 def transform_crs(gdf: gpd.GeoDataFrame, target_crs: CRS) -> gpd.GeoDataFrame:
     """
@@ -69,15 +91,16 @@ def transform_crs(gdf: gpd.GeoDataFrame, target_crs: CRS) -> gpd.GeoDataFrame:
         gpd.GeoDataFrame: GeoDataFrame with transformed CRS.
 
     Raises:
-        GeoprocessingError: If there's an error during CRS transformation.
+        CRSTransformError: If there's an error during CRS transformation.
     """
     try:
-        if gdf.crs != target_crs.value:
+        if not gdf.crs.is_exact_same(pyproj.CRS.from_user_input(target_crs.value)):
             return gdf.to_crs(epsg=target_crs.value.split(":")[1])
         return gdf
     except Exception as e:
         logger.error(f"Error transforming CRS to {target_crs.value}: {str(e)}")
-        raise GeoprocessingError("Failed to transform CRS") from e
+        raise CRSTransformError("Failed to transform CRS") from e
+
 
 def create_buffer(gdf: gpd.GeoDataFrame, buffer_distance: BufferDistance) -> gpd.GeoDataFrame:
     """
@@ -91,7 +114,7 @@ def create_buffer(gdf: gpd.GeoDataFrame, buffer_distance: BufferDistance) -> gpd
         gpd.GeoDataFrame: GeoDataFrame with buffered geometries.
 
     Raises:
-        GeoprocessingError: If there's an error creating the buffer.
+        BufferCreationError: If there's an error creating the buffer.
     """
     try:
         buffered = gdf.copy()
@@ -99,7 +122,7 @@ def create_buffer(gdf: gpd.GeoDataFrame, buffer_distance: BufferDistance) -> gpd
         return buffered
     except Exception as e:
         logger.error(f"Error creating buffer: {str(e)}")
-        raise GeoprocessingError("Failed to create buffer") from e
+        raise BufferCreationError("Failed to create buffer") from e
 
 def perform_spatial_join(left_gdf: gpd.GeoDataFrame, right_gdf: gpd.GeoDataFrame, 
                          predicates: List[SpatialPredicate]) -> gpd.GeoDataFrame:
@@ -115,15 +138,26 @@ def perform_spatial_join(left_gdf: gpd.GeoDataFrame, right_gdf: gpd.GeoDataFrame
         gpd.GeoDataFrame: Combined result of spatial joins.
 
     Raises:
-        GeoprocessingError: If there's an error during spatial join.
+        SpatialJoinError: If there's an error during spatial join.
     """
     try:
-        joins = [gpd.sjoin(left_gdf, right_gdf, how='inner', predicate=pred.value) for pred in predicates]
-        combined = pd.concat(joins)
+        results: Dict[SpatialPredicate, gpd.GeoDataFrame] = {}
+        for pred in predicates:
+            try:
+                result = gpd.sjoin(left_gdf, right_gdf, how='inner', predicate=pred.value)
+                results[pred] = result
+            except Exception as e:
+                logger.warning(f"Error in spatial join with predicate {pred.value}: {str(e)}")
+                continue
+
+        if not results:
+            raise SpatialJoinError("All spatial joins failed")
+
+        combined = pd.concat(results.values())
         return combined.drop_duplicates()
     except Exception as e:
         logger.error(f"Error performing spatial join: {str(e)}")
-        raise GeoprocessingError("Failed to perform spatial join") from e
+        raise SpatialJoinError("Failed to perform spatial join") from e
 
 def group_and_aggregate(df: pd.DataFrame) -> gpd.GeoDataFrame:
     """
@@ -136,7 +170,7 @@ def group_and_aggregate(df: pd.DataFrame) -> gpd.GeoDataFrame:
         gpd.GeoDataFrame: Grouped and aggregated GeoDataFrame.
 
     Raises:
-        GeoprocessingError: If there's an error during grouping and aggregation.
+        GroupingError: If there's an error during grouping and aggregation.
     """
     try:
         grouped = df.groupby(['geometry', 'created_unique_id_1_left', 'bridge_id_left']).agg({
@@ -144,9 +178,12 @@ def group_and_aggregate(df: pd.DataFrame) -> gpd.GeoDataFrame:
             'RD_NAME_right': lambda x: ', '.join(x.astype(str)),
         }).reset_index()
         return gpd.GeoDataFrame(grouped, geometry='geometry', crs=df.crs)
+    except KeyError as e:
+        logger.error(f"Grouping error: missing column {str(e)}")
+        raise GroupingError("Grouping failed due to missing column") from e
     except Exception as e:
-        logger.error(f"Error grouping and aggregating data: {str(e)}")
-        raise GeoprocessingError("Failed to group and aggregate data") from e
+        logger.error(f"Unexpected error during grouping: {str(e)}")
+        raise GroupingError("Unexpected error during grouping") from e
 
 def save_geopackage(gdf: gpd.GeoDataFrame, file_path: str):
     """
@@ -161,7 +198,8 @@ def save_geopackage(gdf: gpd.GeoDataFrame, file_path: str):
     """
     if OutputControl.SAVE_INTERMEDIATE_GEOPACKAGES.value:
         try:
-            gdf.to_file(file_path, driver="GPKG")
+            with fiona.Env():
+                gdf.to_file(file_path, driver="GPKG")
             logger.info(f"Saved GeoPackage: {file_path}")
         except Exception as e:
             logger.error(f"Error saving GeoPackage {file_path}: {str(e)}")
@@ -237,6 +275,17 @@ def main():
 
         logger.info("Geospatial analysis completed successfully.")
 
+
+    except FileReadError as e:
+        logger.error(f"File read error: {str(e)}")
+    except CRSTransformError as e:
+        logger.error(f"CRS transformation error: {str(e)}")
+    except BufferCreationError as e:
+        logger.error(f"Buffer creation error: {str(e)}")
+    except SpatialJoinError as e:
+        logger.error(f"Spatial join error: {str(e)}")
+    except GroupingError as e:
+        logger.error(f"Grouping error: {str(e)}")
     except GeoprocessingError as e:
         logger.error(f"Geoprocessing error: {str(e)}")
     except Exception as e:
