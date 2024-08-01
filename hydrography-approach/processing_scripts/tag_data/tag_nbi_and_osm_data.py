@@ -2,7 +2,7 @@ import csv
 import os
 import subprocess
 import sys
-
+from typing import Optional, Tuple
 from qgis.analysis import QgsNativeAlgorithms
 from qgis.core import (
     QgsApplication,
@@ -199,18 +199,45 @@ def get_line_intersections(filtered_osm_gl, rivers_gl):
     return intersections
 
 
-def load_layers(nbi_points_fp, osm_fp, logger):
+def load_layers(nbi_points_fp: str, osm_fp: str, logger) -> Tuple[Optional[QgsVectorLayer], Optional[QgsVectorLayer]]:
     """
-    Load required layers
+    Load required layers with improved error handling.
+
+    Args:
+        nbi_points_fp (str): File path to the NBI points layer.
+        osm_fp (str): File path to the OSM ways layer.
+        logger: Logger instance for logging errors.
+
+    Returns:
+        Tuple[Optional[QgsVectorLayer], Optional[QgsVectorLayer]]:
+            A tuple containing the NBI points layer and the OSM ways layer.
     """
-    nbi_points_gl = QgsVectorLayer(nbi_points_fp, "nbi-points", "ogr")
-    if not nbi_points_gl.isValid():
-        logger.error("NBI points layer failed to load!")
+    def load_layer(fp: str, layer_name: str) -> Optional[QgsVectorLayer]:
+        """
+        Load a layer and log errors if the loading fails.
+
+        Args:
+            fp (str): File path to the layer.
+            layer_name (str): Name of the layer for logging purposes.
+
+        Returns:
+            Optional[QgsVectorLayer]: Loaded layer or None if failed.
+        """
+        layer = QgsVectorLayer(fp, layer_name, "ogr")
+        if not layer.isValid():
+            logger.error(f"{layer_name} layer failed to load. Check the file path and ensure the file exists.")
+            return None
+        return layer
+
+    nbi_points_gl = load_layer(nbi_points_fp, "nbi-points")
+    osm_gl = load_layer(osm_fp, "filtered")
+
+    if nbi_points_gl is None:
+        logger.error("NBI points layer is critical and could not be loaded. Exiting.")
         sys.exit(1)
 
-    osm_gl = QgsVectorLayer(osm_fp, "filtered", "ogr")
-    if not osm_gl.isValid():
-        logger.error("OSM ways layer failed to load!")
+    if osm_gl is None:
+        logger.error("OSM ways layer could not be loaded. Exiting.")
         sys.exit(1)
 
     return nbi_points_gl, osm_gl
