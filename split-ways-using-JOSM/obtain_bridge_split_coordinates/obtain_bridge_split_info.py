@@ -2,6 +2,7 @@ import csv
 import json
 import logging
 from multiprocessing import Pool, cpu_count
+import os
 
 import pyproj
 from shapely.geometry import LineString, Point
@@ -22,10 +23,24 @@ def setup_logging():
     )
 
 def load_geojson(file_path):
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        logging.error(f"File not found: {file_path}")
+        return None
+    
+    # Check if the file is readable
+    if not os.access(file_path, os.R_OK):
+        logging.error(f"File not readable: {file_path}")
+        return None
+    
+    # Try to open and load the file
     try:
         with open(file_path, "r") as f:
             data = json.load(f)
         return data
+    except json.JSONDecodeError as e:
+        logging.error(f"Error decoding JSON from the file: {e}")
+        return None
     except Exception as e:
         logging.error(f"Error loading GeoJSON file: {e}")
         return None
