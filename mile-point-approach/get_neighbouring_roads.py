@@ -115,8 +115,19 @@ def create_buffer(gdf: gpd.GeoDataFrame, buffer_distance: BufferDistance) -> gpd
 
     Raises:
         BufferCreationError: If there's an error creating the buffer.
+        ValueError: If the CRS units are not supported.
     """
     try:
+        crs = gdf.crs
+        if crs.is_projected:
+            # For projected CRS, units are typically meters
+            distance = buffer_distance.value
+        elif crs.is_geographic:
+            # For geographic CRS, convert degrees to meters (approximate)
+            distance = buffer_distance.value / 111000  # 1 degree ≈ 111 km
+        else:
+            raise ValueError("Unsupported CRS type")
+        
         buffered = gdf.copy()
         buffered['geometry'] = gdf.buffer(buffer_distance.value)
         return buffered
@@ -185,7 +196,7 @@ def group_and_aggregate(df: pd.DataFrame) -> gpd.GeoDataFrame:
         logger.error(f"Unexpected error during grouping: {str(e)}")
         raise GroupingError("Unexpected error during grouping") from e
 
-def save_geopackage(gdf: gpd.GeoDataFrame, file_path: str):
+def save_geopackage(gdf: gpd.GeoDataFrame, file_path: str) -> None:
     """
     Save a GeoDataFrame to a GeoPackage file if SAVE_INTERMEDIATE_GEOPACKAGES is True.
 
@@ -205,7 +216,7 @@ def save_geopackage(gdf: gpd.GeoDataFrame, file_path: str):
             logger.error(f"Error saving GeoPackage {file_path}: {str(e)}")
             raise GeoprocessingError(f"Failed to save GeoPackage: {file_path}") from e
 
-def save_csv(df: pd.DataFrame, file_path: str):
+def save_csv(df: pd.DataFrame, file_path: str) -> None:
     """
     Save a DataFrame to a CSV file.
 
@@ -223,11 +234,12 @@ def save_csv(df: pd.DataFrame, file_path: str):
         logger.error(f"Error saving CSV {file_path}: {str(e)}")
         raise GeoprocessingError(f"Failed to save CSV: {file_path}") from e
 
-def main():
+def main() -> None:
     try:
         # Read GeoPackage files
         osm_road_points = read_geopackage(FilePath.OSM_ROAD_POINTS.value)
         state_road = read_geopackage(FilePath.STATE_ROAD.value)
+        print("Total bridges",len(osm_road_points))
 
         logger.info(f"OSM Road Points CRS: {osm_road_points.crs}")
         logger.info(f"State Road CRS: {state_road.crs}")
@@ -271,7 +283,7 @@ def main():
         })
         
         #Add osm ids in final_df
-        final_df=final_df.merge(osm_road_points[["osm_id","created_unique_id"]], on='created_unique_id', how='left')
+        final_df=final_df.merge(osm_road_points[["osm_id","created_unique_id","bridge_id"]], on=['created_unique_id','bridge_id'], how='left')
 
         # Save final results as CSV (always generated)
         save_csv(final_df, "grouped_neighbouring_roads.csv")
