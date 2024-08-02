@@ -34,7 +34,7 @@ class SpatialPredicate(Enum):
 
 class OutputControl(Enum):
     """Enum for output control flags."""
-    SAVE_INTERMEDIATE_GEOPACKAGES = True
+    SAVE_INTERMEDIATE_GEOPACKAGES = False
 
 class GeoprocessingError(Exception):
     """Custom exception for geoprocessing errors."""
