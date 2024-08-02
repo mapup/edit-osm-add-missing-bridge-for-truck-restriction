@@ -2,10 +2,11 @@
 import geopandas as gpd
 import pandas as pd
 from enum import Enum
-from typing import List,Dict
+from typing import List,Dict,Tuple
 import logging
 import pyproj
 import fiona
+from pathlib import Path
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -60,6 +61,36 @@ class GroupingError(GeoprocessingError):
     """Exception raised when there's an error during the grouping operation."""
     pass
 
+class DataLoadError(Exception):
+    """Exception raised when there's an error loading data."""
+    pass
+
+class OutputPreparationError(Exception):
+    """Exception raised when there's an error preparing the output."""
+    pass
+
+def validate_file_path(file_path: str) -> str:
+    """
+    Validate a file path for security and existence.
+
+    Args:
+        file_path (str): The file path to validate.
+
+    Returns:
+        str: The validated absolute file path.
+
+    Raises:
+        ValueError: If the file path is invalid or doesn't meet the existence requirement.
+    """
+    try:
+        path = Path(file_path).resolve()
+        if not path.exists():
+            raise ValueError(f"File does not exist: {path}")
+        return str(path)
+    except Exception as e:
+        logger.error(f"Error validating file path {file_path}: {str(e)}")
+        raise ValueError(f"Invalid file path: {file_path}") from e
+    
 def read_geopackage(file_path: str) -> gpd.GeoDataFrame:
     """
     Read a GeoPackage file and return a GeoDataFrame.
@@ -74,6 +105,7 @@ def read_geopackage(file_path: str) -> gpd.GeoDataFrame:
         FileReadError: If there's an error reading the file.
     """
     try:
+        file_path=validate_file_path(file_path)
         return gpd.read_file(file_path, engine="pyogrio", use_arrow=True)
     except Exception as e:
         logger.error(f"Error reading file {file_path}: {str(e)}")
@@ -129,7 +161,7 @@ def create_buffer(gdf: gpd.GeoDataFrame, buffer_distance: BufferDistance) -> gpd
             raise ValueError("Unsupported CRS type")
         
         buffered = gdf.copy()
-        buffered['geometry'] = gdf.buffer(buffer_distance.value)
+        buffered['geometry'] = gdf.buffer(distance)
         return buffered
     except Exception as e:
         logger.error(f"Error creating buffer: {str(e)}")
@@ -207,6 +239,8 @@ def save_geopackage(gdf: gpd.GeoDataFrame, file_path: str) -> None:
     Raises:
         GeoprocessingError: If there's an error saving the GeoPackage.
     """
+    file_path=validate_file_path(file_path)
+
     if OutputControl.SAVE_INTERMEDIATE_GEOPACKAGES.value:
         try:
             with fiona.Env():
@@ -228,18 +262,27 @@ def save_csv(df: pd.DataFrame, file_path: str) -> None:
         GeoprocessingError: If there's an error saving the CSV.
     """
     try:
+        file_path=validate_file_path(file_path)
         df.to_csv(file_path, index=False)
         logger.info(f"Saved CSV: {file_path}")
     except Exception as e:
         logger.error(f"Error saving CSV {file_path}: {str(e)}")
         raise GeoprocessingError(f"Failed to save CSV: {file_path}") from e
 
-def main() -> None:
+def load_and_transform_data() -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+    """
+    Load and transform the input data.
+    
+    Returns:
+        Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]: Transformed OSM road points and state road data.
+    
+    Raises:
+        DataLoadError: If there's an error loading or transforming the data.
+    """
     try:
         # Read GeoPackage files
         osm_road_points = read_geopackage(FilePath.OSM_ROAD_POINTS.value)
         state_road = read_geopackage(FilePath.STATE_ROAD.value)
-        print("Total bridges",len(osm_road_points))
 
         logger.info(f"OSM Road Points CRS: {osm_road_points.crs}")
         logger.info(f"State Road CRS: {state_road.crs}")
@@ -247,6 +290,48 @@ def main() -> None:
         # Transform CRS
         state_road = transform_crs(state_road, CRS.EPSG_3857)
         osm_road_points = transform_crs(osm_road_points, CRS.EPSG_3857)
+
+        return osm_road_points, state_road
+    except (FileReadError, CRSTransformError) as e:
+        logger.error(f"Error loading and transforming data: {str(e)}")
+        raise DataLoadError("Failed to load and transform data") from e
+
+def prepare_final_output(grouped_gpd: gpd.GeoDataFrame, osm_road_points: gpd.GeoDataFrame) -> pd.DataFrame:
+    """
+    Prepare the final output by grouping, aggregating, and merging data.
+    
+    Args:
+        grouped_gpd (gpd.GeoDataFrame): Grouped and aggregated data.
+        osm_road_points (gpd.GeoDataFrame): Original OSM road points data.
+    
+    Returns:
+        pd.DataFrame: Final processed data.
+    
+    Raises:
+        OutputPreparationError: If there's an error preparing the final output.
+    """
+    try:
+        # Prepare final DataFrame for CSV
+        final_df = grouped_gpd.drop(columns='geometry').rename(columns={
+            "created_unique_id_1_left": "created_unique_id",
+            'bridge_id_left': 'bridge_id',
+            'created_unique_id_1_right': 'neighbouring_ids',
+            'RD_NAME_right': 'neighbouring_roads'
+        })
+        
+        #Add osm ids in final_df
+        final_df=final_df.merge(osm_road_points[["osm_id","created_unique_id","bridge_id"]], on=['created_unique_id','bridge_id'], how='left')
+        
+        return final_df
+    except (GroupingError, ValueError) as e:
+        logger.error(f"Error preparing final output: {str(e)}")
+        raise OutputPreparationError("Failed to prepare final output") from e
+
+
+def main() -> None:
+    try:
+        # Load and transform data
+        osm_road_points, state_road = load_and_transform_data()
 
         # Create buffers
         osm_road_points_buffer = create_buffer(osm_road_points, BufferDistance.BRIDGE_POINT)
@@ -256,6 +341,8 @@ def main() -> None:
 
         # Filter roads
         filtered_roads = roads_within_buffer[roads_within_buffer['created_unique_id_1'] == roads_within_buffer['created_unique_id_2']]
+        
+        # Create buffer
         filtered_roads_buffer = create_buffer(filtered_roads, BufferDistance.ROAD)
 
         # Save intermediate results
@@ -274,16 +361,8 @@ def main() -> None:
         # Group and aggregate
         grouped_gpd = group_and_aggregate(joined)
 
-        # Prepare final DataFrame for CSV
-        final_df = grouped_gpd.drop(columns='geometry').rename(columns={
-            "created_unique_id_1_left": "created_unique_id",
-            'bridge_id_left': 'bridge_id',
-            'created_unique_id_1_right': 'neighbouring_ids',
-            'RD_NAME_right': 'neighbouring_roads'
-        })
-        
-        #Add osm ids in final_df
-        final_df=final_df.merge(osm_road_points[["osm_id","created_unique_id","bridge_id"]], on=['created_unique_id','bridge_id'], how='left')
+        # Prepare final results
+        final_df = prepare_final_output(grouped_gpd, osm_road_points)
 
         # Save final results as CSV (always generated)
         save_csv(final_df, "grouped_neighbouring_roads.csv")
@@ -301,6 +380,10 @@ def main() -> None:
         logger.error(f"Spatial join error: {str(e)}")
     except GroupingError as e:
         logger.error(f"Grouping error: {str(e)}")
+    except DataLoadError as e:
+        logger.error(f"Data Loading error: {str(e)}")
+    except OutputPreparationError as e:
+        logger.error(f"Output preparation error: {str(e)}")
     except GeoprocessingError as e:
         logger.error(f"Geoprocessing error: {str(e)}")
     except Exception as e:
