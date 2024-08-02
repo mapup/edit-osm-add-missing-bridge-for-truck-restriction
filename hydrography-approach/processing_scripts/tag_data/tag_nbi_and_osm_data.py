@@ -1,8 +1,10 @@
 import csv
+import logging
 import os
 import subprocess
 import sys
 from typing import Optional, Tuple
+
 from qgis.analysis import QgsNativeAlgorithms
 from qgis.core import (
     QgsApplication,
@@ -199,7 +201,17 @@ def get_line_intersections(filtered_osm_gl, rivers_gl):
     return intersections
 
 
-def load_layers(nbi_points_fp: str, osm_fp: str, logger) -> Tuple[Optional[QgsVectorLayer], Optional[QgsVectorLayer]]:
+class LayerLoadError(Exception):
+    """Custom exception for errors in loading vector layers."""
+
+    def __init__(self, layer_name: str, message: str):
+        super().__init__(f"{layer_name} layer: {message}")
+        self.layer_name = layer_name
+
+
+def load_layers(
+    nbi_points_fp: str, osm_fp: str, logger: logging.Logger
+) -> Tuple[Optional[QgsVectorLayer], Optional[QgsVectorLayer]]:
     """
     Load required layers with improved error handling.
 
@@ -212,6 +224,7 @@ def load_layers(nbi_points_fp: str, osm_fp: str, logger) -> Tuple[Optional[QgsVe
         Tuple[Optional[QgsVectorLayer], Optional[QgsVectorLayer]]:
             A tuple containing the NBI points layer and the OSM ways layer.
     """
+
     def load_layer(fp: str, layer_name: str) -> Optional[QgsVectorLayer]:
         """
         Load a layer and log errors if the loading fails.
@@ -225,47 +238,20 @@ def load_layers(nbi_points_fp: str, osm_fp: str, logger) -> Tuple[Optional[QgsVe
         """
         layer = QgsVectorLayer(fp, layer_name, "ogr")
         if not layer.isValid():
-            logger.error(f"{layer_name} layer failed to load. Check the file path and ensure the file exists.")
-            return None
+            logger.error(
+                f"{layer_name} layer failed to load. Check the file path and ensure the file exists."
+            )
+            raise LayerLoadError(layer_name, "Failed to load layer.")
         return layer
 
-    nbi_points_gl = load_layer(nbi_points_fp, "nbi-points")
-    osm_gl = load_layer(osm_fp, "filtered")
-
-    if nbi_points_gl is None:
-        logger.error("NBI points layer is critical and could not be loaded. Exiting.")
-        sys.exit(1)
-
-    if osm_gl is None:
-        logger.error("OSM ways layer could not be loaded. Exiting.")
-        sys.exit(1)
+    try:
+        nbi_points_gl = load_layer(nbi_points_fp, "nbi-points")
+        osm_gl = load_layer(osm_fp, "filtered")
+    except LayerLoadError as e:
+        logger.error(e)
+        raise  # Re-raise the exception to be handled at a higher level
 
     return nbi_points_gl, osm_gl
-
-
-'''
-def load_layers(nbi_points_fp, osm_fp):
-    """
-    Load required layers and create spatial indexes
-    """
-    nbi_points_gl = QgsVectorLayer(nbi_points_fp, "nbi-points", "ogr")
-    if not nbi_points_gl.isValid():
-        print("NBI points layer failed to load!")
-        sys.exit(1)
-
-    osm_gl = QgsVectorLayer(osm_fp, "filtered", "ogr")
-    if not osm_gl.isValid():
-        print("OSM ways layer failed to load!")
-        sys.exit(1)
-
-    # Create spatial index for NBI points
-    nbi_index = QgsSpatialIndex(nbi_points_gl.getFeatures())
-
-    # Create spatial index for OSM ways
-    osm_index = QgsSpatialIndex(osm_gl.getFeatures())
-
-    return nbi_points_gl, osm_gl
-'''
 
 
 def process_bridge(
