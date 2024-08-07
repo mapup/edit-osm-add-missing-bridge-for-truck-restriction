@@ -85,6 +85,7 @@ def main():
     osm_nhd_join_csv = config["output_files"]["osm_nhd_join_csv"]
     nbi_10_join_csv = config["output_files"]["nbi_10_join_csv"]
     nbi_30_join_csv = config["output_files"]["nbi_30_join_csv"]
+    exploded_osm_data_csv = config["output_files"]["exploded_osm_data_csv"]
 
     print("\nTagging NBI and OSM data.")
     tag_nbi_and_osm_data.process_tagging(
@@ -107,6 +108,7 @@ def main():
         osm_nhd_join_csv,
         nbi_10_join_csv,
         nbi_30_join_csv,
+        exploded_osm_data_csv
     )
 
     # --------------------------------------------Associate join data--------------------------------------------
@@ -133,7 +135,7 @@ def main():
         intermediate_association,
         association_with_intersections,
         input_csv,
-        bridge_association_lengths,
+        bridge_association_lengths
     )
 
     print("\nGetting NBI point projections on associated ways.")
@@ -141,11 +143,11 @@ def main():
         final_bridges,
         filtered_highways,
         bridge_association_lengths,
-        bridge_with_proj_points,
+        bridge_with_proj_points
     )
 
     print("\nCalculating fuzzy match for OSM road name.")
-    calculate_match_percentage.run(bridge_with_proj_points, bridge_match_percentage)
+    calculate_match_percentage.run(bridge_with_proj_points, bridge_match_percentage,exploded_osm_data_csv)
 
     print("\nExcluding nearby bridges.")
     exclude_nearby_bridges.run(

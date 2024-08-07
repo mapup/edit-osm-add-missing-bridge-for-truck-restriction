@@ -72,6 +72,7 @@ def run(final_bridges, filtered_highways, bridge_association_lengths, bridge_wit
                     "bridge_length": round(row["bridge_length"]/3.281,2),
                     "projected_long": projected_point.x,
                     "projected_lat": projected_point.y,
+                    "Unique_Bridge_OSM_Combinations": row["Unique_Bridge_OSM_Combinations"]
                 }
             )
         except (ValueError, KeyError, IndexError):
@@ -90,6 +91,7 @@ def run(final_bridges, filtered_highways, bridge_association_lengths, bridge_wit
                     "bridge_length": round(row["bridge_length"]/3.281,2),
                     "projected_long": "",
                     "projected_lat": "",
+                    "Unique_Bridge_OSM_Combinations": row["Unique_Bridge_OSM_Combinations"]
                 }
             )
 

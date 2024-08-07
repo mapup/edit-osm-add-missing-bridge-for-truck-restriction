@@ -35,4 +35,4 @@ output_files:
   bridge_with_proj_points: "output-data/{{ state }}/csv-files/bridge-osm-association-with-projected-points.csv"
   bridge_match_percentage: "output-data/{{ state }}/csv-files/Association-match-check-with-percentage.csv"
   final_bridges_csv: "output-data/{{ state }}/csv-files/Final-bridges-with-percentage-match.csv"
-  
+  exploded_osm_data_csv: "output-data/{{ state }}/csv-files/exploded-OSM-data.csv"

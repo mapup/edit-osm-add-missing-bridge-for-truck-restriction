@@ -276,6 +276,7 @@ def add_bridge_details(df, nbi_bridge_data, bridge_association_lengths):
             "6A - Features Intersected",
             "7 - Facility Carried By Structure",
             "49 - Structure Length (ft.)",
+            "Unique_Bridge_OSM_Combinations"
         ]
     ].drop_duplicates()
 
