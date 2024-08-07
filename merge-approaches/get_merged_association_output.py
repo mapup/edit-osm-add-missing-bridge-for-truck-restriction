@@ -2,7 +2,11 @@ import geopandas as gpd
 import pandas as pd
 from fuzzywuzzy import fuzz
 from typing import Union, Tuple, List
+import logging
 
+# Set up logging
+logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Function to calculate similarity
 def calculate_osm_similarity(name: str, target: str) -> float:
@@ -18,9 +22,15 @@ def calculate_osm_similarity(name: str, target: str) -> float:
     """
     try:
         return fuzz.token_sort_ratio(name, target)
+    except TypeError as e:
+        logger.error(f"TypeError in calculate_osm_similarity: {str(e)}", exc_info=True)
+        raise
+    except ValueError as e:
+        logger.error(f"ValueError in calculate_osm_similarity: {str(e)}", exc_info=True)
+        raise
     except Exception as e:
-        print(f"Error occurred while calculating OSM similarity: {e}")
-        raise Exception(f"Error occurred while calculating OSM similarity: {e}")
+        logger.error(f"Unexpected error in calculate_osm_similarity: {str(e)}", exc_info=True)
+        raise
 
 
 def read_geopackage_to_dataframe(filepath: str) -> gpd.GeoDataFrame:
@@ -35,9 +45,18 @@ def read_geopackage_to_dataframe(filepath: str) -> gpd.GeoDataFrame:
     """
     try:
         return gpd.read_file(filepath)
+    except FileNotFoundError as e:
+        logger.error(f"FileNotFoundError: GeoPackage file not found at {filepath}: {str(e)}", exc_info=True)
+        raise
+    except PermissionError as e:
+        logger.error(f"PermissionError: Unable to access GeoPackage file at {filepath}: {str(e)}", exc_info=True)
+        raise
+    except gpd.io.file.DriverError as e:
+        logger.error(f"DriverError: Unable to read GeoPackage file at {filepath}: {str(e)}", exc_info=True)
+        raise
     except Exception as e:
-        print(f"Error occurred while reading GeoPackage file: {e}")
-        raise Exception(f"Error occurred while reading GeoPackage file: {e}")
+        logger.error(f"Unexpected error while reading GeoPackage file at {filepath}: {str(e)}", exc_info=True)
+        raise
 
 
 def extract_coordinates(geom: object) -> Union[Tuple[float, float] , Tuple[None, None]]:
@@ -57,9 +76,12 @@ def extract_coordinates(geom: object) -> Union[Tuple[float, float] , Tuple[None,
             return None, None
         else:
             return geom.x, geom.y
+    except AttributeError as e:
+        logger.error(f"AttributeError in extract_coordinates: Geometry object lacks 'x' or 'y' attribute: {str(e)}", exc_info=True)
+        raise
     except Exception as e:
-        print(f"Error occurred while extracting coordinates: {e}")
-        raise Exception(f"Error occurred while extracting coordinates: {e}")
+        logger.error(f"Unexpected error in extract_coordinates: {str(e)}", exc_info=True)
+        raise
 
 def calculate_similarity_for_neighbouring_roads(
     merge_df: pd.DataFrame,
@@ -80,6 +102,13 @@ def calculate_similarity_for_neighbouring_roads(
         pandas.DataFrame: The merge_df DataFrame with the added similarity columns and the dropped similarity columns.
     """
     try:
+        if neighbouring_roads_col not in merge_df.columns:
+            raise KeyError(f"Column '{neighbouring_roads_col}' not found in DataFrame")
+        
+        for col in fixed_cols:
+            if col not in merge_df.columns:
+                raise KeyError(f"Fixed column '{col}' not found in DataFrame")
+            
         neighbouring_roads_expanded_df=merge_df[neighbouring_roads_col].str.split(',', expand=True)
         neighbouring_roads_expanded_df=pd.concat([neighbouring_roads_expanded_df, merge_df[fixed_cols]], axis=1)
         
@@ -89,9 +118,15 @@ def calculate_similarity_for_neighbouring_roads(
         merge_df.drop([fixed_cols[0]+'_similarity',fixed_cols[1]+'_similarity'], axis=1, inplace=True)
         
         return merge_df
+    except KeyError as e:
+        logger.error(f"KeyError in calculate_similarity_for_neighbouring_roads: {str(e)}", exc_info=True)
+        raise
+    except ValueError as e:
+        logger.error(f"ValueError in calculate_similarity_for_neighbouring_roads: {str(e)}", exc_info=True)
+        raise
     except Exception as e:
-        print(f"Error occurred while calculating similarity for neighbouring roads: {e}")
-        raise Exception(f"Error occurred while calculating similarity for neighbouring roads: {e}")
+        logger.error(f"Unexpected error in calculate_similarity_for_neighbouring_roads: {str(e)}", exc_info=True)
+        raise
 
 
 def main():
@@ -171,8 +206,8 @@ def main():
         merge_df.to_csv("merged-approaches-association-output.csv", index=False)
     
     except Exception as e:
-        print(f"An error occurred: {e}")
-        raise Exception(f"An error occurred: {e}")
+        logger.error(f"Unexpected error occurred: {str(e)}", exc_info=True)
+        raise 
 
 if __name__ == "__main__":
     main()
