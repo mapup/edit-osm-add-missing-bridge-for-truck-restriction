@@ -12,7 +12,7 @@ from processing_scripts.associate_data import (
 )
 from processing_scripts.filter_data import filter_osm_ways, process_filter_nbi_bridges
 from processing_scripts.tag_data import tag_nbi_and_osm_data
-
+from processing_scripts.bridge_statistics import create_bridge_stats
 
 def load_config(state_name):
     """
@@ -62,7 +62,7 @@ def main():
     output_gpkg_file = config["output_files"]["nbi_geopackage"]
 
     print("\nFiltering NBI bridge data.")
-    process_filter_nbi_bridges.create_nbi_geopackage(
+    total_bridges,overlapping_or_duplicate_coordinates,non_posted_culverts = process_filter_nbi_bridges.create_nbi_geopackage(
         input_csv, output_duplicate_exclude_csv, output_gpkg_file
     )
 
@@ -153,6 +153,12 @@ def main():
     exclude_nearby_bridges.run(
         bridge_match_percentage, nearby_join_csv, final_bridges_csv
     )
+
+    print("\nCreating bridge statistics.")
+    bridge_edit_stats=config["output_files"]['bridge_edit_stats']
+    create_bridge_stats.create_bridge_statistics(bridge_edit_stats,state_name,input_csv,yes_filter_bridges,manmade_filter_bridges,
+                                                 parallel_filter_bridges,final_bridges,final_bridges_csv,
+                                                 total_bridges,overlapping_or_duplicate_coordinates,non_posted_culverts)
 
     print("\nProcess completed.")
 

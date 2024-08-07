@@ -128,14 +128,45 @@ def calculate_similarity_for_neighbouring_roads(
         logger.error(f"Unexpected error in calculate_similarity_for_neighbouring_roads: {str(e)}", exc_info=True)
         raise
 
+def update_stats(stats: pd.DataFrame, description: str, count: int, stats_list: List[int]) -> Tuple[pd.DataFrame, List[int]]:
+    """
+    Updates the statistics based on the given description and count.
+
+    Args:
+        stats (pd.DataFrame): The DataFrame containing the statistics.
+        description (str): The description of the statistic to be updated.
+        count (int): The count to be appended to the stats list and assigned to the specified description.
+        stats_list (List[int]): The list containing the statistics.
+
+    Returns:
+        Tuple[pd.DataFrame, List[int]]: The updated statistics DataFrame and the updated statistics list.
+
+    Raises:
+        KeyError: If the specified description does not exist in the DataFrame.
+    """
+    try:
+        if not (stats["Description"] == description).any():
+            logger.error(f"Description '{description}' does not exist in the DataFrame.", exc_info=True)
+            raise KeyError(f"Description '{description}' does not exist in the DataFrame.")
+        
+        stats_list.append(count)
+        stats.loc[stats["Description"] == description, "bridges"] = count
+        return stats, stats_list
+    except Exception as e:
+        logger.error(f"Unexpected error in update_stats: {str(e)}", exc_info=True)
+        raise
+
+
 
 def main():
     try:
         neighbouring_roads_output = "grouped_neighbouring_roads.csv"
         mile_point_output = "osm_road_points.gpkg"
         hydrography_output = "hydrography-method/output-data/csv-files/Final-bridges-with-percentage-match.csv"
+        bridge_edit_stats = "hydrography-method/output-data/csv-files/Kentucky-bridge-edit-stats.csv"
         similarity_threshold = 70
-
+        prepare_bridge_stats = True
+        
         # Read GeoPackage and CSV into DataFrames
         milepoint_df = read_geopackage_to_dataframe(mile_point_output)
         milepoint_df = milepoint_df.to_crs("EPSG:4326")
@@ -169,8 +200,24 @@ def main():
             how="left",
         )
 
-        #For final stats, to see blanks in point geometry
-        #merge_df.to_csv("unsnapped.csv",index=False)
+        if prepare_bridge_stats:
+            #For final stats, unsnapped are blanks in point geometry
+            #merge_df.to_csv("unsnapped.csv",index=False)
+            try:
+                stats=pd.read_csv(bridge_edit_stats)
+                curr_index=stats.loc[stats["Description"] == "Not editing: Unsnapped"].index.values[0]
+                stats_list=stats['bridges'].tolist()[:curr_index]
+            except FileNotFoundError as e:
+                logger.error(f"FileNotFoundError: {str(e)}", exc_info=True)
+                raise
+            except Exception as e:
+                logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+                raise
+
+            #Not editing: Unsnapped
+            unsnapped=(merge_df.geometry.isnull()).sum()
+            stats,stats_list=update_stats(stats,"Not editing: Unsnapped", unsnapped,stats_list)
+
 
         # Calculate similarity for neighbouring roads
         neighbouring_roads_col='neighbouring_roads'
@@ -194,17 +241,37 @@ def main():
         #removing null geometry
         merge_df=merge_df[~merge_df['geometry'].isnull()]
 
+        if prepare_bridge_stats:
+            #Not editing: Different OSM NBI association in both approaches
+            different_osm_ids_in_both_approaches=stats_list[0]-sum(stats_list[1:])-len(merge_df)
+            stats,stats_list=update_stats(stats,"Not editing: Different OSM NBI association in both approaches", different_osm_ids_in_both_approaches,stats_list)
+
         #Automated and Maproulette edits 
         merge_df['osm_edits']="Automated"
-        merge_df.loc[(merge_df["Unique_Bridge_OSM_Combinations"] > 1 ) & ( merge_df["combined_max_similarity"]<similarity_threshold),"osm_edits"]="Maproulette"
+        mask=(merge_df["Unique_Bridge_OSM_Combinations"] > 1 ) & ( merge_df["combined_max_similarity"]<similarity_threshold)
+        merge_df.loc[mask,"osm_edits"]="Maproulette"
+
+        if prepare_bridge_stats:
+            #Not editing: MapRoulette bridges [(Multiple OSM ways within 30m bridge buffer) and (OSM road match % < 70)
+            maproulette_edits=len(merge_df[mask])
+            stats,stats_list=update_stats(stats,"Not editing: MapRoulette bridges [(Multiple OSM ways within 30m bridge buffer) and (OSM road match % < 70)]", maproulette_edits,stats_list)
+
 
         # Select desired columns for output
         keep_cols = ['8 - Structure Number', 'osm_id_hydro', 'osm_name', 'final_stream_id', 'stream_name', '6A - Features Intersected', '7 - Facility Carried By Structure', 'bridge_length', 'Unique_Bridge_OSM_Combinations', 'combined_max_similarity', 'projected_long_mile', 'projected_lat_mile', 'osm_edits']
         merge_df=merge_df[keep_cols]
         merge_df.rename(columns={"osm_id_hydro": "osm_id"}, inplace=True)
 
+        if prepare_bridge_stats:
+            #Editing: Automated bridge edits
+            stats,stats_list=update_stats(stats,"Editing: Automated bridge edits", stats_list[0]-sum(stats_list[1:]),stats_list)
+
+            #save stats
+            stats.to_csv(bridge_edit_stats, index=False)
+            print(stats)
+
         merge_df.to_csv("merged-approaches-association-output.csv", index=False)
-    
+            
     except Exception as e:
         logger.error(f"Unexpected error occurred: {str(e)}", exc_info=True)
         raise 
