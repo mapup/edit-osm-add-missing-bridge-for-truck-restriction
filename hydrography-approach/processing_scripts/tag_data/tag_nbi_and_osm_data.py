@@ -1,7 +1,9 @@
 import csv
+import logging
 import os
 import subprocess
 import sys
+from typing import Optional, Tuple
 
 from qgis.analysis import QgsNativeAlgorithms
 from qgis.core import (
@@ -199,50 +201,61 @@ def get_line_intersections(filtered_osm_gl, rivers_gl):
     return intersections
 
 
-def load_layers(nbi_points_fp, osm_fp):
-    """
-    Load required layers
-    """
-    nbi_points_gl = QgsVectorLayer(nbi_points_fp, "nbi-points", "ogr")
-    if not nbi_points_gl.isValid():
-        print("NBI points layer failed to load!")
-        sys.exit(1)
+class LayerLoadError(Exception):
+    """Custom exception for errors in loading vector layers."""
 
-    osm_gl = QgsVectorLayer(osm_fp, "filtered", "ogr")
-    if not osm_gl.isValid():
-        print("OSM ways layer failed to load!")
-        sys.exit(1)
+    def __init__(self, layer_name: str, message: str):
+        super().__init__(f"{layer_name} layer: {message}")
+        self.layer_name = layer_name
+
+
+def load_layers(
+    nbi_points_fp: str, osm_fp: str, logger: logging.Logger
+) -> Tuple[Optional[QgsVectorLayer], Optional[QgsVectorLayer]]:
+    """
+    Load required layers with improved error handling.
+
+    Args:
+        nbi_points_fp (str): File path to the NBI points layer.
+        osm_fp (str): File path to the OSM ways layer.
+        logger: Logger instance for logging errors.
+
+    Returns:
+        Tuple[Optional[QgsVectorLayer], Optional[QgsVectorLayer]]:
+            A tuple containing the NBI points layer and the OSM ways layer.
+    """
+
+    def load_layer(fp: str, layer_name: str) -> Optional[QgsVectorLayer]:
+        """
+        Load a layer and log errors if the loading fails.
+
+        Args:
+            fp (str): File path to the layer.
+            layer_name (str): Name of the layer for logging purposes.
+
+        Returns:
+            Optional[QgsVectorLayer]: Loaded layer or None if failed.
+        """
+        layer = QgsVectorLayer(fp, layer_name, "ogr")
+        if not layer.isValid():
+            logger.error(
+                f"{layer_name} layer failed to load. Check the file path and ensure the file exists."
+            )
+            raise LayerLoadError(layer_name, "Failed to load layer.")
+        return layer
+
+    try:
+        nbi_points_gl = load_layer(nbi_points_fp, "nbi-points")
+        osm_gl = load_layer(osm_fp, "filtered")
+    except LayerLoadError as e:
+        logger.error(e)
+        raise  # Re-raise the exception to be handled at a higher level
 
     return nbi_points_gl, osm_gl
-
-
-'''
-def load_layers(nbi_points_fp, osm_fp):
-    """
-    Load required layers and create spatial indexes
-    """
-    nbi_points_gl = QgsVectorLayer(nbi_points_fp, "nbi-points", "ogr")
-    if not nbi_points_gl.isValid():
-        print("NBI points layer failed to load!")
-        sys.exit(1)
-
-    osm_gl = QgsVectorLayer(osm_fp, "filtered", "ogr")
-    if not osm_gl.isValid():
-        print("OSM ways layer failed to load!")
-        sys.exit(1)
-
-    # Create spatial index for NBI points
-    nbi_index = QgsSpatialIndex(nbi_points_gl.getFeatures())
-
-    # Create spatial index for OSM ways
-    osm_index = QgsSpatialIndex(osm_gl.getFeatures())
-
-    return nbi_points_gl, osm_gl
-'''
 
 
 def process_bridge(
-    nbi_points_gl, exploded_osm_gl, bridge_yes_join_csv, yes_filter_bridges
+    nbi_points_gl, exploded_osm_gl, bridge_yes_join_csv, yes_filter_bridges, logger
 ):
     """
     Process bridges: filter and join NBI data with OSM data
@@ -272,7 +285,7 @@ def process_bridge(
         filtered_layer, yes_filter_bridges, "utf-8", filtered_layer.crs(), "GPKG"
     )
 
-    print(f"\nOutput file: {yes_filter_bridges} has been created successfully!")
+    logger.info(f"Output file: {yes_filter_bridges} has been created successfully!")
 
     QgsProject.instance().removeMapLayer(filtered_osm_gl.id())
     QgsProject.instance().removeMapLayer(buffer_80.id())
@@ -282,7 +295,7 @@ def process_bridge(
 
 
 def process_layer_tag(
-    nbi_points_gl, exploded_osm_gl, manmade_join_csv, manmade_filter_bridges
+    nbi_points_gl, exploded_osm_gl, manmade_join_csv, manmade_filter_bridges, logger
 ):
     """
     Process layer tags: filter and join NBI data with OSM data based on layer tag
@@ -312,7 +325,7 @@ def process_layer_tag(
         filtered_layer, manmade_filter_bridges, "utf-8", filtered_layer.crs(), "GPKG"
     )
 
-    print(f"\nOutput file: {manmade_filter_bridges} has been created successfully!")
+    logger.info(f"Output file: {manmade_filter_bridges} has been created successfully!")
 
     QgsProject.instance().removeMapLayer(filtered_osm_gl.id())
     QgsProject.instance().removeMapLayer(buffer_30.id())
@@ -322,7 +335,7 @@ def process_layer_tag(
 
 
 def process_parallel_bridges(
-    nbi_points_gl, exploded_osm_gl, parallel_join_csv, parallel_filter_bridges
+    nbi_points_gl, exploded_osm_gl, parallel_join_csv, parallel_filter_bridges, logger
 ):
     """
     Process parallel bridges: identify and filter parallel bridges
@@ -361,7 +374,9 @@ def process_parallel_bridges(
         filtered_layer, parallel_filter_bridges, "utf-8", filtered_layer.crs(), "GPKG"
     )
 
-    print(f"\nOutput file: {parallel_filter_bridges} has been created successfully!")
+    logger.info(
+        f"Output file: {parallel_filter_bridges} has been created successfully!"
+    )
 
     QgsProject.instance().removeMapLayer(filtered_osm_gl.id())
     QgsProject.instance().removeMapLayer(buffer_30.id())
@@ -400,6 +415,7 @@ def process_culverts_from_pbf(
     state_name,
     culvert_join_csv,
     final_bridges,
+    logger,
 ):
     """
     Process and filter out tunnels marked as culverts from a local OSM PBF file.
@@ -485,7 +501,7 @@ def process_culverts_from_pbf(
         filtered_layer, final_bridges, "utf-8", filtered_layer.crs(), "GPKG"
     )
 
-    print(f"\nOutput file: {final_bridges} has been created successfully!")
+    logger.info(f"Output file: {final_bridges} has been created successfully!")
 
     # Remove temporary layers from the project
     QgsProject.instance().removeMapLayer(osm_layer.id())
@@ -505,16 +521,18 @@ def process_buffer_join(
     osm_nhd_join_csv,
     nbi_10_join_csv,
     nbi_30_join_csv,
+    logger,
 ):
     """
     Process buffer join: join NBI data with OSM and river data
     """
     base_filename = os.path.splitext(os.path.basename(rivers_data))[0]
     rivers_fp = rivers_data + f"|layername=NHD-{state_name}-Flowline"
+    # rivers_fp = rivers_data + "|layername=NHDFlowline"
 
     rivers_gl = QgsVectorLayer(rivers_fp, "rivers", "ogr")
     if not rivers_gl.isValid():
-        print("Rivers layer failed to load!")
+        logger.error("Rivers layer failed to load!")
         sys.exit(1)
 
     filter_expression = "highway not in ('abandoned','bridleway','construction','corridor','crossing','cycleway','elevator','escape','footway','living_street','path','pedestrian','planned','proposed','raceway','rest_area','steps') AND bridge IS NULL AND layer IS NULL"
@@ -526,7 +544,7 @@ def process_buffer_join(
         intersections,
         intersections_csv,
     )
-    print(f"\nOutput file: {intersections_csv} has been created successfully!")
+    logger.info(f"Output file: {intersections_csv} has been created successfully!")
 
     osm_river_join = join_by_location(
         osm_gl,
@@ -545,7 +563,7 @@ def process_buffer_join(
         osm_river_join,
         osm_nhd_join_csv,
     )
-    print(f"\nOutput file: {osm_nhd_join_csv} has been created successfully!")
+    logger.info(f"Output file: {osm_nhd_join_csv} has been created successfully!")
 
     buffer_10 = create_buffer(nbi_points_gl, 0.0001)
     buffer_30 = create_buffer(nbi_points_gl, 0.0003)
@@ -568,13 +586,12 @@ def process_buffer_join(
         "permanent_identifier",
     ]
 
-
     vl_to_csv_filter(
         nbi_10_river_join,
         nbi_10_join_csv,
         keep_fields,
     )
-    print(f"\nOutput file: {nbi_10_join_csv} has been created successfully!")
+    logger.info(f"Output file: {nbi_10_join_csv} has been created successfully!")
 
     nbi_30_osm_river_join = join_by_location(
         buffer_30, osm_river_join, [], geometric_predicates=[0]
@@ -597,7 +614,7 @@ def process_buffer_join(
         nbi_30_join_csv,
         keep_fields,
     )
-    print(f"\nOutput file: {nbi_30_join_csv} has been created successfully!")
+    logger.info(f"Output file: {nbi_30_join_csv} has been created successfully!")
 
 
 def process_tagging(
@@ -612,7 +629,6 @@ def process_tagging(
     parallel_filter_bridges,
     nearby_join_csv,
     state_folder,
-    state_name,
     culvert_join_csv,
     final_bridges,
     rivers_data,
@@ -620,6 +636,8 @@ def process_tagging(
     osm_nhd_join_csv,
     nbi_10_join_csv,
     nbi_30_join_csv,
+    logger,
+    state_name,
 ):
     # Get QGIS pathname for NBI points vector layer
     base_filename = os.path.splitext(os.path.basename(nbi_geopackage))[0]
@@ -628,17 +646,21 @@ def process_tagging(
     osm_fp = filtered_highways + "|layername=lines"
     osm_pbf_path = state_latest_osm
 
-    nbi_points_gl, osm_gl = load_layers(nbi_points_fp, osm_fp)
+    nbi_points_gl, osm_gl = load_layers(nbi_points_fp, osm_fp, logger)
     exploded_osm_gl = explode_osm_data(osm_gl)
 
     output_layer1 = process_bridge(
-        nbi_points_gl, exploded_osm_gl, bridge_yes_join_csv, yes_filter_bridges
+        nbi_points_gl, exploded_osm_gl, bridge_yes_join_csv, yes_filter_bridges, logger
     )
     output_layer2 = process_layer_tag(
-        output_layer1, exploded_osm_gl, manmade_join_csv, manmade_filter_bridges
+        output_layer1, exploded_osm_gl, manmade_join_csv, manmade_filter_bridges, logger
     )
     output_layer3 = process_parallel_bridges(
-        output_layer2, exploded_osm_gl, parallel_join_csv, parallel_filter_bridges
+        output_layer2,
+        exploded_osm_gl,
+        parallel_join_csv,
+        parallel_filter_bridges,
+        logger,
     )
     process_nearby_bridges(output_layer3, nearby_join_csv)
     output_layer4 = process_culverts_from_pbf(
@@ -648,6 +670,7 @@ def process_tagging(
         state_name,
         culvert_join_csv,
         final_bridges,
+        logger,
     )
     process_buffer_join(
         output_layer4,
@@ -659,4 +682,5 @@ def process_tagging(
         osm_nhd_join_csv,
         nbi_10_join_csv,
         nbi_30_join_csv,
+        logger,
     )
