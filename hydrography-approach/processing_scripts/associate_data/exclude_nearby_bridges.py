@@ -1,17 +1,24 @@
+from typing import Callable
+
 import pandas as pd
 
 
-def load_bridge_info(csv_file):
+def load_bridge_info(csv_file: str) -> pd.DataFrame:
     """Load bridge information CSV into a DataFrame."""
     return pd.read_csv(csv_file)
 
 
-def load_nearby_join(csv_file):
+def load_nearby_join(csv_file: str) -> pd.DataFrame:
     """Load nearby join CSV into a DataFrame."""
     return pd.read_csv(csv_file)
 
 
-def filter_duplicates_and_output(bridge_df, join_df, output_csv, logger):
+def filter_duplicates_and_output(
+    bridge_df: pd.DataFrame,
+    join_df: pd.DataFrame,
+    output_csv: str,
+    logger: Callable[[str], None],
+) -> None:
     """Filter duplicates based on osm_similarity score and output filtered bridge info."""
 
     filtered_df = join_df[
@@ -36,31 +43,33 @@ def filter_duplicates_and_output(bridge_df, join_df, output_csv, logger):
                     bridge_df["8 - Structure Number"] == sn2, "osm_similarity"
                 ].values[0]
 
+                # Determine which ID to retain based on osm_similarity score
+                if osm_similarity_sn1 > osm_similarity_sn2:
+                    remove_ids.add(sn2)
+                elif osm_similarity_sn2 > osm_similarity_sn1:
+                    remove_ids.add(sn1)
+                else:
+                    remove_ids.add(sn2)  # Arbitrarily keep sn1 if scores are equal
+
             except IndexError:
                 # Handle the case where ID is not found in bridge_df
-                logger.info(f"id {sn1} or {sn2} not found in bridge_df")
+                logger(f"id {sn1} or {sn2} not found in bridge_df")
                 continue
 
-            # Determine which ID to retain based on osm_similarity score
-            if osm_similarity_sn1 > osm_similarity_sn2:
-                remove_ids.add(sn2)
-            elif osm_similarity_sn2 > osm_similarity_sn1:
-                remove_ids.add(sn1)
-            else:
-                remove_ids.add(sn2)  # Arbitrarily keep sn1 if scores are equal
-        else:
-            continue
-
-    # logger.info("IDs to be removed:", remove_ids)
-
-    # Filter bridge_df based on retain_ids and output to a new CSV
+    # Filter bridge_df based on remove_ids and output to a new CSV
     filtered_bridge_df = bridge_df[~bridge_df["8 - Structure Number"].isin(remove_ids)]
     filtered_bridge_df.to_csv(output_csv, index=False)
 
-    logger.info(f"Filtered bridge information saved to '{output_csv}'.")
+    logger(f"Filtered bridge information saved to '{output_csv}'.")
 
 
-def run(bridge_match_percentage, nearby_join_csv, final_bridges_csv, logger):
+def run(
+    bridge_match_percentage: str,
+    nearby_join_csv: str,
+    final_bridges_csv: str,
+    logger: Callable[[str], None],
+) -> None:
+    """Load data, filter duplicates, and save the filtered bridge info."""
     # Load data
     bridge_df = load_bridge_info(bridge_match_percentage)
     join_df = load_nearby_join(nearby_join_csv)

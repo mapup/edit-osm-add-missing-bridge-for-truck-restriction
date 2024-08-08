@@ -1,32 +1,38 @@
+import logging
+from typing import Dict, List
+
 import geopandas as gpd
 import pandas as pd
+from shapely.geometry import LineString, Point
 
 
-def project_point_on_line(point, line):
-    # Calculate the projected point on the line
-    projected_point = line.interpolate(line.project(point))
-    return projected_point
+def project_point_on_line(point: Point, line: LineString) -> Point:
+    """Project a point onto a line and return the projected point."""
+    return line.interpolate(line.project(point))
 
 
-def run(final_bridges, filtered_highways, bridge_association_lengths, bridge_with_proj_points):
+def run(
+    final_bridges: str,
+    filtered_highways: str,
+    bridge_association_lengths: str,
+    bridge_with_proj_points: str,
+    logger: logging.Logger,
+) -> None:
+    """Project bridge points onto OSM ways and save the results to a CSV file."""
+
     # Load geopackage files
-    bridge_points_gdf = gpd.read_file(
-        final_bridges
-    )
-    osm_ways_gdf = gpd.read_file(
-        filtered_highways, layer="lines"
-    )
+    bridge_points_gdf = gpd.read_file(final_bridges)
+    osm_ways_gdf = gpd.read_file(filtered_highways, layer="lines")
 
     # Load CSV file
-    associations_df = pd.read_csv(
-        bridge_association_lengths
-    )
+    associations_df = pd.read_csv(bridge_association_lengths)
 
     # Ensure CRS is consistent
-    bridge_points_gdf = bridge_points_gdf.to_crs(epsg=4326)
-    osm_ways_gdf = osm_ways_gdf.to_crs(epsg=4326)
+    if bridge_points_gdf.crs != osm_ways_gdf.crs:
+        bridge_points_gdf = bridge_points_gdf.to_crs(epsg=4326)
+        osm_ways_gdf = osm_ways_gdf.to_crs(epsg=4326)
 
-    # Trim whitespace from 8 - Structure Number in associations_df and bridge_points_gdf
+    # Trim whitespace from structure numbers
     associations_df["8 - Structure Number"] = associations_df[
         "8 - Structure Number"
     ].str.strip()
@@ -34,7 +40,7 @@ def run(final_bridges, filtered_highways, bridge_association_lengths, bridge_wit
         "8 - Structure Number"
     ].str.strip()
 
-    projected_data = []
+    projected_data: List[Dict] = []
 
     for _, row in associations_df.iterrows():
         structure_number = row["8 - Structure Number"]
@@ -57,7 +63,6 @@ def run(final_bridges, filtered_highways, bridge_association_lengths, bridge_wit
             # Project the bridge point onto the OSM way
             projected_point = project_point_on_line(bridge_point, osm_way)
 
-            # Append the result to the list
             projected_data.append(
                 {
                     "8 - Structure Number": structure_number,
@@ -69,12 +74,13 @@ def run(final_bridges, filtered_highways, bridge_association_lengths, bridge_wit
                     "7 - Facility Carried By Structure": row[
                         "7 - Facility Carried By Structure"
                     ],
-                    "bridge_length": round(row["bridge_length"]/3.281,2),
+                    "bridge_length": round(row["bridge_length"] / 3.281, 2),
                     "projected_long": projected_point.x,
                     "projected_lat": projected_point.y,
                 }
             )
-        except (ValueError, KeyError, IndexError):
+
+        except (ValueError, KeyError, IndexError) as e:
             # Handle cases where final_osm_id is NaN or OSM way is not found
             projected_data.append(
                 {
@@ -87,17 +93,15 @@ def run(final_bridges, filtered_highways, bridge_association_lengths, bridge_wit
                     "7 - Facility Carried By Structure": row[
                         "7 - Facility Carried By Structure"
                     ],
-                    "bridge_length": round(row["bridge_length"]/3.281,2),
+                    "bridge_length": round(row["bridge_length"] / 3.281, 2),
                     "projected_long": "",
                     "projected_lat": "",
                 }
             )
+            logger.error(f"Error processing structure number {structure_number}: {e}")
 
     # Create output DataFrame
     output_df = pd.DataFrame(projected_data)
 
     # Save to CSV
-    output_df.to_csv(
-        bridge_with_proj_points,
-        index=False,
-    )
+    output_df.to_csv(bridge_with_proj_points, index=False)

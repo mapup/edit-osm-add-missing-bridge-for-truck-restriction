@@ -177,6 +177,7 @@ def associate_join_data(config: Dict) -> None:
         config["output_files"]["filtered_highways"],
         files["bridge_association_lengths"],
         files["bridge_with_proj_points"],
+        logger
     )
 
     logger.info("Calculating fuzzy match for OSM road name.")
