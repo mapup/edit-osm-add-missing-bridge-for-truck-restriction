@@ -510,7 +510,7 @@ def process_buffer_join(
     Process buffer join: join NBI data with OSM and river data
     """
     base_filename = os.path.splitext(os.path.basename(rivers_data))[0]
-    rivers_fp = rivers_data + f"|layername=NHD-{state_name}-Flowline"
+    rivers_fp = rivers_data + f"|layername=NHDFlowline"
 
     rivers_gl = QgsVectorLayer(rivers_fp, "rivers", "ogr")
     if not rivers_gl.isValid():
@@ -620,6 +620,7 @@ def process_tagging(
     osm_nhd_join_csv,
     nbi_10_join_csv,
     nbi_30_join_csv,
+    exploded_osm_data_csv
 ):
     # Get QGIS pathname for NBI points vector layer
     base_filename = os.path.splitext(os.path.basename(nbi_geopackage))[0]
@@ -630,6 +631,10 @@ def process_tagging(
 
     nbi_points_gl, osm_gl = load_layers(nbi_points_fp, osm_fp)
     exploded_osm_gl = explode_osm_data(osm_gl)
+
+    #Save OSM exploded layer
+    vl_to_csv(exploded_osm_gl, exploded_osm_data_csv)
+    print(f"\nOutput file: {exploded_osm_data_csv} has been created successfully!")
 
     output_layer1 = process_bridge(
         nbi_points_gl, exploded_osm_gl, bridge_yes_join_csv, yes_filter_bridges

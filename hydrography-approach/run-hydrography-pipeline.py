@@ -12,7 +12,7 @@ from processing_scripts.associate_data import (
 )
 from processing_scripts.filter_data import filter_osm_ways, process_filter_nbi_bridges
 from processing_scripts.tag_data import tag_nbi_and_osm_data
-
+from processing_scripts.bridge_statistics import create_bridge_stats
 
 def load_config(state_name):
     """
@@ -62,7 +62,7 @@ def main():
     output_gpkg_file = config["output_files"]["nbi_geopackage"]
 
     print("\nFiltering NBI bridge data.")
-    process_filter_nbi_bridges.create_nbi_geopackage(
+    total_bridges,overlapping_or_duplicate_coordinates,non_posted_culverts = process_filter_nbi_bridges.create_nbi_geopackage(
         input_csv, output_duplicate_exclude_csv, output_gpkg_file
     )
 
@@ -85,6 +85,7 @@ def main():
     osm_nhd_join_csv = config["output_files"]["osm_nhd_join_csv"]
     nbi_10_join_csv = config["output_files"]["nbi_10_join_csv"]
     nbi_30_join_csv = config["output_files"]["nbi_30_join_csv"]
+    exploded_osm_data_csv = config["output_files"]["exploded_osm_data_csv"]
 
     print("\nTagging NBI and OSM data.")
     tag_nbi_and_osm_data.process_tagging(
@@ -107,6 +108,7 @@ def main():
         osm_nhd_join_csv,
         nbi_10_join_csv,
         nbi_30_join_csv,
+        exploded_osm_data_csv
     )
 
     # --------------------------------------------Associate join data--------------------------------------------
@@ -133,7 +135,7 @@ def main():
         intermediate_association,
         association_with_intersections,
         input_csv,
-        bridge_association_lengths,
+        bridge_association_lengths
     )
 
     print("\nGetting NBI point projections on associated ways.")
@@ -141,16 +143,22 @@ def main():
         final_bridges,
         filtered_highways,
         bridge_association_lengths,
-        bridge_with_proj_points,
+        bridge_with_proj_points
     )
 
     print("\nCalculating fuzzy match for OSM road name.")
-    calculate_match_percentage.run(bridge_with_proj_points, bridge_match_percentage)
+    calculate_match_percentage.run(bridge_with_proj_points, bridge_match_percentage,exploded_osm_data_csv)
 
     print("\nExcluding nearby bridges.")
     exclude_nearby_bridges.run(
         bridge_match_percentage, nearby_join_csv, final_bridges_csv
     )
+
+    print("\nCreating bridge statistics.")
+    bridge_edit_stats=config["output_files"]['bridge_edit_stats']
+    create_bridge_stats.create_bridge_statistics(bridge_edit_stats,state_name,input_csv,yes_filter_bridges,manmade_filter_bridges,
+                                                 parallel_filter_bridges,final_bridges,final_bridges_csv,
+                                                 total_bridges,overlapping_or_duplicate_coordinates,non_posted_culverts)
 
     print("\nProcess completed.")
 
