@@ -38,7 +38,7 @@ def get_gpkg_length(gpkg_file: str) -> int:
 
 def get_csv_length(csv_file: str) -> int:
     """
-    Reads a GeoPackage file and returns its length.
+    Reads a CSV file and returns its length.
 
     Args:
         csv_file (str): Path to CSV file to read.
@@ -88,13 +88,31 @@ def update_stats(stats: pd.DataFrame, description: str, count: int, stats_list: 
         stats_list.append(count)
         stats.loc[stats["Description"] == description, "bridges"] = count
         return stats, stats_list
-    except KeyError as e:
-        logger.error(f"Description '{description}' does not exist in the DataFrame. {str(e)}", exc_info=True)
-        raise KeyError(f"Description '{description}' does not exist in the DataFrame.") from e
     except Exception as e:
         logger.error(f"Unexpected error in update_stats: {str(e)}", exc_info=True)
         raise
 
+def calculate_and_update_stats(stats: pd.DataFrame, description: str, base_value: int, stats_list: List[int], length_function, *args) -> Tuple[pd.DataFrame, List[int]]:
+    """
+    Calculates the statistics based on the base value and the provided length function, then updates the statistics.
+
+    Args:
+        stats (pd.DataFrame): The DataFrame containing the statistics.
+        description (str): The description of the statistic to be updated.
+        base_value (int): The base value used for calculation.
+        stats_list (List[int]): The list containing the statistics.
+        length_function (callable): The function to get the length for calculation.
+        *args: Additional arguments for the length function.
+
+    Returns:
+        Tuple[pd.DataFrame, List[int]]: The updated statistics DataFrame and the updated statistics list.
+    """
+    try:
+        value = base_value - sum(stats_list[1:]) - length_function(*args)
+        return update_stats(stats, description, value, stats_list)
+    except Exception as e:
+        logger.error(f"Error calculating and updating stats for {description}: {str(e)}", exc_info=True)
+        raise
 
 def create_bridge_statistics(
     bridge_edit_stats: str, state: str, input_csv: str, yes_filter_bridges: str, manmade_filter_bridges: str, parallel_filter_bridges: str, final_bridges: str, final_bridges_csv: str,
@@ -182,24 +200,19 @@ def create_bridge_statistics(
         stats,stats_list=update_stats(stats,"Not editing: Non-posted culverts", non_posted_culverts,stats_list)
 
         #Not editing: Bridges already exist in OSM
-        bridges_exist_in_osm=stats_list[0]-sum(stats_list[1:])-get_gpkg_length(yes_filter_bridges)
-        stats,stats_list=update_stats(stats,"Not editing: Bridges already exist in OSM", bridges_exist_in_osm,stats_list)
-        
+        stats, stats_list = calculate_and_update_stats(stats, "Not editing: Bridges already exist in OSM", stats_list[0], stats_list, get_gpkg_length, yes_filter_bridges)
+
         #Not editing: Bridges near/on freeways
-        bridges_near_on_freeways=stats_list[0]-sum(stats_list[1:])-get_gpkg_length(manmade_filter_bridges)
-        stats,stats_list=update_stats(stats,"Not editing: Bridges near/on freeways", bridges_near_on_freeways,stats_list)
+        stats, stats_list = calculate_and_update_stats(stats, "Not editing: Bridges near/on freeways", stats_list[0], stats_list, get_gpkg_length, manmade_filter_bridges)
 
         #Not editing: Bridges on opposite directions (parallel bridges) at the same location
-        parallel_bridges=stats_list[0]-sum(stats_list[1:])-get_gpkg_length(parallel_filter_bridges)
-        stats,stats_list=update_stats(stats,"Not editing: Bridges on opposite directions (parallel bridges) at the same location", parallel_bridges,stats_list)
+        stats, stats_list = calculate_and_update_stats(stats, "Not editing: Bridges on opposite directions (parallel bridges) at the same location", stats_list[0], stats_list, get_gpkg_length, parallel_filter_bridges)
 
         #Not editing: Bridges near tunnel=culvert in OSM
-        bridges_near_tunnel_equals_culvert=stats_list[0]-sum(stats_list[1:])-get_gpkg_length(final_bridges)
-        stats,stats_list=update_stats(stats,"Not editing: Bridges near tunnel=culvert in OSM", bridges_near_tunnel_equals_culvert,stats_list)
+        stats, stats_list = calculate_and_update_stats(stats, "Not editing: Bridges near tunnel=culvert in OSM", stats_list[0], stats_list, get_gpkg_length, final_bridges)
 
         #Not editing: Nearby bridges
-        nearby_bridges=stats_list[0]-sum(stats_list[1:])-get_csv_length(final_bridges_csv)
-        stats,stats_list=update_stats(stats,"Not editing: Nearby bridges", nearby_bridges,stats_list)
+        stats, stats_list = calculate_and_update_stats(stats, "Not editing: Nearby bridges", stats_list[0], stats_list, get_csv_length, final_bridges_csv)
 
         print(stats)
 

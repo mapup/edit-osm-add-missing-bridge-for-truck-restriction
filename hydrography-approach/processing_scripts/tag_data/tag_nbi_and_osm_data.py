@@ -634,6 +634,7 @@ def process_tagging(
 
     #Save OSM exploded layer
     vl_to_csv(exploded_osm_gl, exploded_osm_data_csv)
+    print(f"\nOutput file: {exploded_osm_data_csv} has been created successfully!")
 
     output_layer1 = process_bridge(
         nbi_points_gl, exploded_osm_gl, bridge_yes_join_csv, yes_filter_bridges
