@@ -207,7 +207,7 @@ def group_and_aggregate(df: pd.DataFrame) -> gpd.GeoDataFrame:
     Group by geometry and aggregate specified columns.
 
     Args:
-        df (pd.DataFrame): Input DataFrame.
+        df (pd.DataFrame): Input DataFrame. 
 
     Returns:
         gpd.GeoDataFrame: Grouped and aggregated GeoDataFrame.
@@ -216,10 +216,14 @@ def group_and_aggregate(df: pd.DataFrame) -> gpd.GeoDataFrame:
         GroupingError: If there's an error during grouping and aggregation.
     """
     try:
-        grouped = df.groupby(['geometry', 'created_unique_id_1_left', 'bridge_id_left']).agg({
+        
+        #Spatial join sometimes gives same rows within a buffer, so drop duplicates
+        drop_duplicates_cols=['geometry', 'created_unique_id_1_left', 'bridge_id_left','created_unique_id_1_right','RD_NAME_right']
+        grouped = df[drop_duplicates_cols].drop_duplicates().groupby(['geometry', 'created_unique_id_1_left', 'bridge_id_left']).agg({
             'created_unique_id_1_right': lambda x: ', '.join(x.astype(str)),
             'RD_NAME_right': lambda x: ', '.join(x.astype(str)),
         }).reset_index()
+
         return gpd.GeoDataFrame(grouped, geometry='geometry', crs=df.crs)
     except KeyError as e:
         logger.error(f"Grouping error: missing column {str(e)}")
@@ -283,6 +287,9 @@ def load_and_transform_data() -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
         # Read GeoPackage files
         osm_road_points = read_geopackage(FilePath.OSM_ROAD_POINTS.value)
         state_road = read_geopackage(FilePath.STATE_ROAD.value)
+
+        #Change 'NAME' to column name that contains road names from state_road dataset
+        # state_road.rename(columns={'NAME':'RD_NAME'}, inplace=True)
 
         logger.info(f"OSM Road Points CRS: {osm_road_points.crs}")
         logger.info(f"State Road CRS: {state_road.crs}")
