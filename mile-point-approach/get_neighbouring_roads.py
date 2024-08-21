@@ -288,8 +288,8 @@ def load_and_transform_data() -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
         osm_road_points = read_geopackage(FilePath.OSM_ROAD_POINTS.value)
         state_road = read_geopackage(FilePath.STATE_ROAD.value)
 
-        #Change 'NAME' to column name that contains road names from state_road dataset
-        state_road.rename(columns={'NAME':'RD_NAME'}, inplace=True)
+        #Change 'NAME' to column name that contains road names from state_road dataset, if its RD_NAME then no need to change
+        # state_road.rename(columns={'NAME':'RD_NAME'}, inplace=True)
 
         logger.info(f"OSM Road Points CRS: {osm_road_points.crs}")
         logger.info(f"State Road CRS: {state_road.crs}")
