@@ -73,7 +73,7 @@ jobs:
       - name: Update project sheet tab
         continue-on-error: true
         run: |
-          sleep 120
+          sleep 240
           RESPONSE=$(curl -s -L \
             "${{ secrets.APPS_SCRIPT_WEB_APP_URL }}?project=mapup-osm-bridge-editor")
           echo "Sheet update response: $RESPONSE"
