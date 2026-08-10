@@ -26,8 +26,9 @@ This repository contains Python and JavaScript scripts using which we plan to ad
 ## Local Setup
 
 1. Clone the repo
-2. Install Python dependencies: `pip install -r requirements.txt`
-3. Download input data (links in each approach section below) into `input-data/<state>/`
+2. Enable the secret-scanning git hook: `./hooks/install.sh` (installs gitleaks if missing; see [docs/gitleaks-setup.md](docs/gitleaks-setup.md))
+3. Install Python dependencies: `pip install -r requirements.txt`
+4. Download input data (links in each approach section below) into `input-data/<state>/`
 
 ## Config
 
