@@ -12,9 +12,7 @@ processing==0.52
 pyproj==3.6.1
 PyYAML==6.0.1
 Shapely==2.0.5
-
-# Security pins for transitive dependencies (Mend CVE remediation)
-click>=8.3.3        # CVE-2026-7246 (command injection in click.edit)
-idna>=3.15          # CVE-2026-45409 (DoS in idna.encode)
-requests>=2.33.0    # CVE-2026-25645 (predictable temp path in extract_zipped_paths)
-urllib3>=2.7.0      # CVE-2026-44432, CVE-2026-9375, CVE-2026-44431 (decompression DoS)
+click>=8.3.3
+idna>=3.15
+requests>=2.33.0
+urllib3>=2.7.0
