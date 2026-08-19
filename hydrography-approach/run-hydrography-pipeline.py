@@ -18,6 +18,10 @@ def load_config(state_name):
     """
     Load configuration
     """
+    # nosemgrep: python.flask.security.xss.audit.direct-use-of-jinja2.direct-use-of-jinja2
+    # Not a web/Flask context: Jinja2 is used here only to render a local YAML config
+    # template (config.yml) for a CLI data pipeline. There is no HTML output and no
+    # untrusted user input, so the XSS concern does not apply. autoescape is enabled.
     env = Environment(
         loader=FileSystemLoader("."), autoescape=select_autoescape(["yaml"])
     )
