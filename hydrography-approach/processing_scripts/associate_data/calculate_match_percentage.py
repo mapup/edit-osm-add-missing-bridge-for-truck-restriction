@@ -1,11 +1,24 @@
 import pandas as pd
 import numpy as np
 from typing import List, Tuple, Optional
-from fuzzywuzzy import fuzz
+from rapidfuzz import fuzz
+from rapidfuzz.utils import default_process
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+def token_sort_ratio(s1: str, s2: str) -> int:
+    """
+    Token sort ratio between two strings, scored 0-100.
+
+    rapidfuzz leaves its inputs untouched and returns a float, so lower-case,
+    strip punctuation and round to keep the score on the same scale the
+    pipeline outputs have always used.
+    """
+    return round(fuzz.token_sort_ratio(s1, s2, processor=default_process))
+
 
 # Function to calculate similarity
 def calculate_similarity_vectorized(df: pd.DataFrame, cols: List[str], fixed_column: str) -> Tuple[pd.Series, pd.Series]:
@@ -26,7 +39,7 @@ def calculate_similarity_vectorized(df: pd.DataFrame, cols: List[str], fixed_col
             mask = s1.notna() & s2.notna()
             result = pd.Series(0, index=s1.index)
             if mask.any():
-                result[mask] = np.vectorize(fuzz.token_sort_ratio, otypes=[np.int64])(
+                result[mask] = np.vectorize(token_sort_ratio, otypes=[np.int64])(
                     s1[mask].astype(str), s2[mask].astype(str)
                 )
             return result

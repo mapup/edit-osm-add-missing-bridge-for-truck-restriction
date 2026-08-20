@@ -128,17 +128,17 @@ class TestReadGeopackageToDataframe(unittest.TestCase):
 
 class TestCalculateOsmSimilarityExceptions(unittest.TestCase):
     def test_type_error_propagates(self):
-        with patch("fuzzywuzzy.fuzz.token_sort_ratio", side_effect=TypeError("bad type")):
+        with patch("rapidfuzz.fuzz.token_sort_ratio", side_effect=TypeError("bad type")):
             with self.assertRaises(TypeError):
                 mod.calculate_osm_similarity("a", "b")
 
     def test_value_error_propagates(self):
-        with patch("fuzzywuzzy.fuzz.token_sort_ratio", side_effect=ValueError("bad val")):
+        with patch("rapidfuzz.fuzz.token_sort_ratio", side_effect=ValueError("bad val")):
             with self.assertRaises(ValueError):
                 mod.calculate_osm_similarity("a", "b")
 
     def test_generic_exception_propagates(self):
-        with patch("fuzzywuzzy.fuzz.token_sort_ratio", side_effect=RuntimeError("crash")):
+        with patch("rapidfuzz.fuzz.token_sort_ratio", side_effect=RuntimeError("crash")):
             with self.assertRaises(RuntimeError):
                 mod.calculate_osm_similarity("a", "b")
 

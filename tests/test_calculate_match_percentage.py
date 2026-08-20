@@ -56,19 +56,19 @@ class TestCalculateSimilarityVectorized(unittest.TestCase):
 class TestCalculateSimilarityVectorizedExceptions(unittest.TestCase):
     def test_value_error_in_fuzz_propagates(self):
         df = pd.DataFrame({"col_a": ["x", "y"], "fixed": ["x", "y"]})
-        with patch("fuzzywuzzy.fuzz.token_sort_ratio", side_effect=ValueError("bad")):
+        with patch("rapidfuzz.fuzz.token_sort_ratio", side_effect=ValueError("bad")):
             with self.assertRaises(ValueError):
                 mod.calculate_similarity_vectorized(df, ["col_a"], "fixed")
 
     def test_type_error_in_fuzz_propagates(self):
         df = pd.DataFrame({"col_a": ["x", "y"], "fixed": ["x", "y"]})
-        with patch("fuzzywuzzy.fuzz.token_sort_ratio", side_effect=TypeError("bad type")):
+        with patch("rapidfuzz.fuzz.token_sort_ratio", side_effect=TypeError("bad type")):
             with self.assertRaises(TypeError):
                 mod.calculate_similarity_vectorized(df, ["col_a"], "fixed")
 
     def test_generic_exception_in_outer_propagates(self):
         df = pd.DataFrame({"col_a": ["x"], "fixed": ["x"]})
-        with patch("fuzzywuzzy.fuzz.token_sort_ratio", side_effect=RuntimeError("crash")):
+        with patch("rapidfuzz.fuzz.token_sort_ratio", side_effect=RuntimeError("crash")):
             with self.assertRaises(RuntimeError):
                 mod.calculate_similarity_vectorized(df, ["col_a"], "fixed")
 

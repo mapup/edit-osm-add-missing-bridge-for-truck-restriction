@@ -1,6 +1,7 @@
 import geopandas as gpd
 import pandas as pd
-from fuzzywuzzy import fuzz
+from rapidfuzz import fuzz
+from rapidfuzz.utils import default_process
 from typing import Union, Tuple, List
 import logging
 
@@ -13,6 +14,9 @@ def calculate_osm_similarity(name: str, target: str) -> float:
     """
     Calculate the similarity between two strings using the token_sort_ratio function from the fuzz library.
 
+    Inputs are lower-cased and stripped of punctuation before comparison, and the
+    score is rounded to an integer.
+
     Parameters:
         name (str): The first string to compare.
         target (str): The second string to compare.
@@ -21,7 +25,7 @@ def calculate_osm_similarity(name: str, target: str) -> float:
         int: The similarity score between the two strings, ranging from 0 to 100.
     """
     try:
-        return fuzz.token_sort_ratio(name, target)
+        return round(fuzz.token_sort_ratio(name, target, processor=default_process))
     except TypeError as e:
         logger.error(f"TypeError in calculate_osm_similarity: {str(e)}", exc_info=True)
         raise
