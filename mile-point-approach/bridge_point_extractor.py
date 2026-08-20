@@ -1,6 +1,6 @@
 import geopandas as gpd
 import pandas as pd
-from fuzzywuzzy import fuzz
+from rapidfuzz import fuzz
 from geographiclib.geodesic import Geodesic
 from shapely.geometry import LineString, Point
 
@@ -178,7 +178,7 @@ def merge_road_and_bridge_dfs(road_df, bridge_df):
     )
 
     joined_df["road_name_score"] = joined_df.apply(
-        lambda row: fuzz.partial_ratio(row["rd_name"], row["feature_over_bridge"]),
+        lambda row: round(fuzz.partial_ratio(row["rd_name"], row["feature_over_bridge"])),
         axis=1,
     )
 

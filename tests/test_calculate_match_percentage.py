@@ -56,19 +56,19 @@ class TestCalculateSimilarityVectorized(unittest.TestCase):
 class TestCalculateSimilarityVectorizedExceptions(unittest.TestCase):
     def test_value_error_in_fuzz_propagates(self):
         df = pd.DataFrame({"col_a": ["x", "y"], "fixed": ["x", "y"]})
-        with patch("fuzzywuzzy.fuzz.token_sort_ratio", side_effect=ValueError("bad")):
+        with patch("rapidfuzz.fuzz.token_sort_ratio", side_effect=ValueError("bad")):
             with self.assertRaises(ValueError):
                 mod.calculate_similarity_vectorized(df, ["col_a"], "fixed")
 
     def test_type_error_in_fuzz_propagates(self):
         df = pd.DataFrame({"col_a": ["x", "y"], "fixed": ["x", "y"]})
-        with patch("fuzzywuzzy.fuzz.token_sort_ratio", side_effect=TypeError("bad type")):
+        with patch("rapidfuzz.fuzz.token_sort_ratio", side_effect=TypeError("bad type")):
             with self.assertRaises(TypeError):
                 mod.calculate_similarity_vectorized(df, ["col_a"], "fixed")
 
     def test_generic_exception_in_outer_propagates(self):
         df = pd.DataFrame({"col_a": ["x"], "fixed": ["x"]})
-        with patch("fuzzywuzzy.fuzz.token_sort_ratio", side_effect=RuntimeError("crash")):
+        with patch("rapidfuzz.fuzz.token_sort_ratio", side_effect=RuntimeError("crash")):
             with self.assertRaises(RuntimeError):
                 mod.calculate_similarity_vectorized(df, ["col_a"], "fixed")
 
@@ -156,6 +156,34 @@ class TestRun(unittest.TestCase):
         with patch("pandas.read_csv", side_effect=Exception("disk error")):
             with self.assertRaises(Exception):
                 mod.run("bridge.csv", "out.csv", "osm.csv")
+
+
+class TestTokenSortRatio(unittest.TestCase):
+    def test_token_order_independent(self):
+        assert mod.token_sort_ratio("Street Main", "Main Street") == 100
+
+    def test_case_and_punctuation_insensitive(self):
+        assert mod.token_sort_ratio("US-60", "us 60") == 100
+
+    def test_accents_are_folded(self):
+        assert mod.token_sort_ratio("Cafe\u0301 Road", "Cafe Road") == 100
+
+    def test_accent_does_not_reorder_sorted_tokens(self):
+        # "A\u0301ngel" sorts after every ASCII letter, so without folding the token
+        # sort would compare "road angel" against "angel road" and score 50.
+        assert mod.token_sort_ratio("\u00c1ngel Road", "Angel Road") == 100
+
+    def test_letters_nfkd_leaves_alone_are_folded(self):
+        assert mod.token_sort_ratio("Stra\u00dfe Road", "Strasse Road") == 100
+
+    def test_non_latin_text_is_preserved(self):
+        assert mod.fold_accents("\u5317\u4eac\u8def") == "\u5317\u4eac\u8def"
+
+    def test_returns_int(self):
+        assert isinstance(mod.token_sort_ratio("Main St", "Main Street"), int)
+
+    def test_none_scores_zero(self):
+        assert mod.token_sort_ratio(None, "Main St") == 0
 
 
 if __name__ == "__main__":
