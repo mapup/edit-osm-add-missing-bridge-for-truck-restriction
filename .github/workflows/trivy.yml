@@ -1,0 +1,104 @@
+name: Trivy Vulnerability Scan
+
+# PORTABLE TEMPLATE — copy into <your-repo>/.github/workflows/trivy.yml
+# as-is.
+#
+# Standalone Trivy filesystem scan (runbook §5.2). Most repos get their
+# Trivy coverage from universal-dependency-track.yml, whose Trivy step
+# generates a CycloneDX SBOM. This file exists for repos that already run a
+# different, more capable SBOM pipeline (cyclonedx-py/cyclonedx-npm with
+# monorepo handling) and so should NOT have that template dropped on top of
+# their working config — they still want Trivy's CVE scan, just not its SBOM.
+#
+# Scope note: this scans the filesystem (dependency manifests, lock files
+# and IaC), not built container images. A repo that ships images should also
+# scan those at build time in its own release workflow.
+#
+# Optional secrets (steps skip gracefully when unset):
+#   DEFECTDOJO_URL, DEFECTDOJO_API_KEY - findings upload
+#   GCHAT_WEBHOOK_URL                  - failure alerts
+
+on:
+  # No branch filter: repos differ in default-branch names, so scan PRs
+  # into any branch rather than assuming main/master/develop.
+  pull_request:
+  schedule:
+    - cron: '15 4 * * *'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Reason for manual run"
+        required: false
+        default: "Manual Trivy run"
+
+jobs:
+  trivy:
+    name: Scan dependencies and IaC
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      # exit-code 0: the scan reports, it does not gate the build. Failing
+      # PRs on pre-existing CVEs would strand every branch on day one; the
+      # findings go to DefectDojo and the artifact instead.
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: json
+          output: trivy-report.json
+          severity: CRITICAL,HIGH,MEDIUM
+          ignore-unfixed: true
+          exit-code: '0'
+
+      - name: Upload to DefectDojo
+        if: always()
+        env:
+          DOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+        run: |
+          if [ -z "$DOJO_URL" ] || [ -z "$DOJO_API_KEY" ]; then
+            echo "DEFECTDOJO_URL/DEFECTDOJO_API_KEY not set — skipping upload."
+            exit 0
+          fi
+          if [ ! -s trivy-report.json ]; then
+            echo "No Trivy output to upload."
+            exit 0
+          fi
+          curl -sS -X POST "$DOJO_URL/api/v2/reimport-scan/" \
+            -H "Authorization: Token $DOJO_API_KEY" \
+            -F "product_name=${{ github.event.repository.name }}" \
+            -F "product_type_name=Research and Development" \
+            -F "engagement_name=CI Dependency Scan" \
+            -F "scan_type=Trivy Scan" \
+            -F "auto_create_context=True" \
+            -F "close_old_findings=True" \
+            -F "push_to_jira=False" \
+            -F "active=True" \
+            -F "verified=True" \
+            -F "group_by=finding_title" \
+            -F "file=@trivy-report.json"
+
+      - name: Archive Trivy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.json
+          retention-days: 90
+          if-no-files-found: ignore
+
+      - name: Send Google Chat Alert on Failure
+        if: failure()
+        env:
+          GCHAT_WEBHOOK_URL: ${{ secrets.GCHAT_WEBHOOK_URL }}
+        run: |
+          if [ -z "$GCHAT_WEBHOOK_URL" ]; then
+            echo "GCHAT_WEBHOOK_URL not set — skipping alert."
+            exit 0
+          fi
+          curl -sS -X POST "$GCHAT_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d '{"text": "🚨 [High] Trivy: scan failed in ${{ github.repository }} — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
