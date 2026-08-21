@@ -8,7 +8,6 @@ networkx==3.3
 numpy==1.24.3
 osmium==3.7.0
 pandas==2.2.2
-processing==0.52
 pyproj==3.6.1
 PyYAML==6.0.1
 Shapely==2.0.5

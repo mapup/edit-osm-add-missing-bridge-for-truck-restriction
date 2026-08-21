@@ -43,7 +43,14 @@ jobs:
         if: hashFiles('**/requirements.txt', '**/pyproject.toml', '**/setup.py') != ''
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          # Pinned, not '3.x'. '3.x' resolved to 3.14, where requirements.txt --
+          # the repo's only one -- failed to install outright (fiona has no
+          # cp314 wheel and its source build needs gdal-config), so the entire
+          # dependency tree was missing from the SBOM and only the 14 names
+          # Trivy could read off the manifest were reported. Every pin in
+          # requirements.txt has a cp311 wheel, and 3.11 is what this repo's
+          # sonarqube-monorepo-scan.yml already uses.
+          python-version: '3.11'
 
       - name: Setup Go (if needed)
         if: hashFiles('**/go.mod') != ''
@@ -131,40 +138,119 @@ jobs:
           echo "✅ Dependency installation complete"
         continue-on-error: true
 
-      - name: Generate SBOM with Trivy
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: fs
-          format: cyclonedx
-          output: bom-raw.json
-          scanners: license
-          license-full: true
-
-      - name: Clean and validate SBOM
+      # Trivy's filesystem scan reads manifest files (requirements.txt), which
+      # carry NO license text: the SBOM it produced had 14 components and zero
+      # licenses, so every component was reported as "No License Metadata".
+      # It also listed requirements.txt itself as a component, and silently
+      # dropped the four ">="-pinned entries plus every transitive dependency.
+      # Instead we generate the SBOM with the ecosystem-native CycloneDX tool,
+      # which reads each license straight from the installed package metadata.
+      - name: Generate SBOMs with resolved licenses (Python + Node)
         run: |
-          echo "🧹 Cleaning SBOM (removing lock files and false positives)..."
-          cat bom-raw.json | jq '
-            .components |= map(select(
-              .name != "package-lock.json" and
-              .name != "yarn.lock" and
-              .name != "pnpm-lock.yaml" and
-              .name != "go.mod" and
-              .name != "go.sum" and
-              .name != "uv.lock" and
-              .name != "poetry.lock" and
-              .name != "Pipfile.lock" and
-              .name != "Cargo.lock" and
-              .name != "composer.lock" and
-              (.name | test(".*lock\\.json$") | not)
-            ))
-          ' > bom.json
+          set -uo pipefail
+          echo "🧾 Generating SBOMs that carry real license data from installed package metadata..."
+          mkdir -p /tmp/sboms
+
+          # ---- Python: one isolated virtualenv per requirements file ----
+          # cyclonedx-bom lives in its OWN venv and is pointed at each project
+          # venv, rather than being installed alongside the project's packages.
+          # Installing it into the project venv would record the scanner's own
+          # dependency tree (cyclonedx-python-lib, license-expression,
+          # py-serializable, packageurl-python, boolean.py, sortedcontainers,
+          # lxml, jsonschema) as components of this repo.
+          #
+          # >=7 is required, not incidental: cyclonedx-python only reads PEP 639
+          # "License-Expression" metadata from v7.0.0 onwards. Modern packages
+          # (click, numpy, urllib3, requests, ...) have dropped the legacy
+          # "License:" header and the "License ::" trove classifiers, so on an
+          # older pin they emit an empty licenses array.
+          python -m venv /tmp/cdx-tool
+          if ! /tmp/cdx-tool/bin/pip install --quiet "cyclonedx-bom>=7,<8"; then
+            echo "::error title=SBOM tooling::could not install cyclonedx-bom; no Python SBOMs will be produced"
+          fi
+
+          idx=0
+          find . -iname "requirements*.txt" -not -path "*/node_modules/*" -not -path "*/.git/*" | while read -r req; do
+            echo "🐍 Python SBOM for $req"
+            venv_dir="/tmp/venvs/py-$idx"
+            python -m venv "$venv_dir"
+            (
+              # shellcheck disable=SC1091
+              source "$venv_dir/bin/activate"
+              pip install --quiet -r "$req" || echo "⚠️  pip install failed for $req; SBOM will only reflect what installed"
+            )
+            /tmp/cdx-tool/bin/cyclonedx-py environment "$venv_dir/bin/python" \
+              --spec-version 1.6 --output-format JSON \
+              --output-file "/tmp/sboms/py-bom-$idx.json" \
+              || echo "⚠️  cyclonedx-py failed for $req; skipping"
+            idx=$((idx + 1))
+          done
+
+          # ---- Node: read licenses from installed node_modules, per project ----
+          # This repo has no Node project today; the loop is kept so the file
+          # stays a drop-in replacement for the shared org template.
+          if find . -name package-lock.json -not -path '*/node_modules/*' -not -path '*/.git/*' | grep -q .; then
+            npm install -g @cyclonedx/cyclonedx-npm >/dev/null 2>&1 || echo "⚠️  could not install cyclonedx-npm"
+          fi
+          idx=0
+          find . -name package-lock.json -not -path '*/node_modules/*' -not -path '*/.git/*' | while read -r lock; do
+            dir=$(dirname "$lock")
+            # cyclonedx-npm errors with "missing project's manifest file" on a
+            # lock file that has no sibling package.json. Skip those.
+            if [ ! -f "$dir/package.json" ]; then
+              echo "⏭️  Skipping $dir: package-lock.json with no package.json"
+              continue
+            fi
+            echo "📦 Node SBOM for $dir"
+            ( cd "$dir" && cyclonedx-npm --ignore-npm-errors --output-format JSON --spec-version 1.6 \
+                --output-file "/tmp/sboms/node-bom-$idx.json" ) \
+              || echo "⚠️  cyclonedx-npm failed in $dir; skipping"
+            idx=$((idx + 1))
+          done
+
+          # ---- Merge every partial SBOM into one CycloneDX document ----
+          FILES=""
+          for f in /tmp/sboms/py-bom-*.json /tmp/sboms/node-bom-*.json; do
+            [ -f "$f" ] && FILES="$FILES $f"
+          done
+
+          if [ -z "$FILES" ]; then
+            echo "⚠️  No SBOMs were produced; writing an empty but valid CycloneDX document so the upload step still succeeds"
+            echo '{"bomFormat":"CycloneDX","specVersion":"1.6","version":1,"components":[]}' > bom.json
+          else
+            echo "🔗 Merging:$FILES"
+            jq -s '{
+              bomFormat: "CycloneDX",
+              specVersion: "1.6",
+              version: 1,
+              metadata: { tools: [ { vendor: "mapup", name: "ci-sbom-merge" } ] },
+              components: ( map(.components // []) | add
+                            | unique_by( (.purl // (.name + "@" + (.version // ""))) ) )
+            }' $FILES > bom.json
+          fi
 
           echo ""
-          echo "📊 SBOM Statistics:"
-          cat bom.json | jq '{
-              totalComponents: (.components | length),
-              componentsWithLicenses: ([.components[] | select(.licenses)] | length)
-          }'
+          echo "📊 SBOM statistics (the fix — licenses should now be populated):"
+          jq '{
+            totalComponents: (.components | length),
+            componentsWithLicenses: ([ .components[] | select((.licenses // []) | length > 0) ] | length)
+          }' bom.json
+
+      # Dependency-Track resolves a licenses[].expression only when it is a
+      # single SPDX ID; compound expressions and legacy free-text license names
+      # stay "unresolved" and get counted as No License Metadata. This step
+      # rewrites those into concrete license IDs.
+      #
+      # Advisory only. Anything it cannot resolve is reported as a warning
+      # annotation and left in the BOM, and continue-on-error keeps even an
+      # outright crash from blocking the upload below -- a missing SBOM in
+      # Dependency-Track is worse than one with a few unresolved licenses. The
+      # script leaves bom.json untouched unless it completes successfully.
+      - name: Normalize licenses so Dependency-Track can resolve them
+        # Run under the cyclonedx tool venv so the script can validate its own
+        # output against the CycloneDX schema before writing.
+        run: /tmp/cdx-tool/bin/python .github/scripts/normalize_sbom_licenses.py bom.json
+        continue-on-error: true
 
       - name: Upload BOM to Dependency-Track
         uses: DependencyTrack/gh-upload-sbom@v3
