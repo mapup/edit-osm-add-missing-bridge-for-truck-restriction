@@ -128,17 +128,17 @@ class TestReadGeopackageToDataframe(unittest.TestCase):
 
 class TestCalculateOsmSimilarityExceptions(unittest.TestCase):
     def test_type_error_propagates(self):
-        with patch("fuzzywuzzy.fuzz.token_sort_ratio", side_effect=TypeError("bad type")):
+        with patch("rapidfuzz.fuzz.token_sort_ratio", side_effect=TypeError("bad type")):
             with self.assertRaises(TypeError):
                 mod.calculate_osm_similarity("a", "b")
 
     def test_value_error_propagates(self):
-        with patch("fuzzywuzzy.fuzz.token_sort_ratio", side_effect=ValueError("bad val")):
+        with patch("rapidfuzz.fuzz.token_sort_ratio", side_effect=ValueError("bad val")):
             with self.assertRaises(ValueError):
                 mod.calculate_osm_similarity("a", "b")
 
     def test_generic_exception_propagates(self):
-        with patch("fuzzywuzzy.fuzz.token_sort_ratio", side_effect=RuntimeError("crash")):
+        with patch("rapidfuzz.fuzz.token_sort_ratio", side_effect=RuntimeError("crash")):
             with self.assertRaises(RuntimeError):
                 mod.calculate_osm_similarity("a", "b")
 
@@ -262,6 +262,23 @@ class TestMain(unittest.TestCase):
              patch("pandas.read_csv", side_effect=FileNotFoundError("missing csv")):
             with self.assertRaises(Exception):
                 mod.main()
+
+
+class TestCalculateOsmSimilarityNormalisation(unittest.TestCase):
+    def test_accents_are_folded(self):
+        assert mod.calculate_osm_similarity("Cafe\u0301 Road", "Cafe Road") == 100
+
+    def test_accent_does_not_reorder_sorted_tokens(self):
+        assert mod.calculate_osm_similarity("\u00c1ngel Road", "Angel Road") == 100
+
+    def test_letters_nfkd_leaves_alone_are_folded(self):
+        assert mod.calculate_osm_similarity("Stra\u00dfe Road", "Strasse Road") == 100
+
+    def test_punctuation_insensitive(self):
+        assert mod.calculate_osm_similarity("US-60", "us 60") == 100
+
+    def test_none_scores_zero(self):
+        assert mod.calculate_osm_similarity(None, "Main St") == 0
 
 
 if __name__ == "__main__":

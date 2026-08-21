@@ -1,11 +1,50 @@
 import pandas as pd
 import numpy as np
 from typing import List, Tuple, Optional
-from fuzzywuzzy import fuzz
+from rapidfuzz import fuzz
+from rapidfuzz.utils import default_process
 import logging
+import unicodedata
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+# Latin characters that NFKD does not decompose to an ASCII base letter.
+_ASCII_EQUIVALENTS = str.maketrans({
+    "ß": "ss", "æ": "ae", "Æ": "AE", "œ": "oe", "Œ": "OE",
+    "ø": "o", "Ø": "O", "ð": "d", "Ð": "D", "þ": "th",
+    "Þ": "TH", "đ": "d", "Đ": "D", "ł": "l", "Ł": "L", "ı": "i",
+})
+
+
+def fold_accents(s: str) -> str:
+    """
+    Reduce accented Latin characters to their base letter, e.g. Café -> Cafe.
+
+    Without this an accent survives into the token sort, where it orders after
+    every ASCII letter: "Ángel Road" and "Angel Road" sort to "road angel" and
+    "angel road" respectively and score 50 instead of 100.
+    """
+    decomposed = unicodedata.normalize("NFKD", s.translate(_ASCII_EQUIVALENTS))
+    return "".join(c for c in decomposed if not unicodedata.combining(c))
+
+
+def process_name(s: str) -> str:
+    """Normalise a name before comparison: fold accents, then lower-case and strip punctuation."""
+    return default_process(fold_accents(s))
+
+
+def token_sort_ratio(s1: str, s2: str) -> int:
+    """
+    Token sort ratio between two strings, scored 0-100.
+
+    rapidfuzz compares its inputs verbatim and returns a float, so normalise
+    the names first and round, keeping scores on the integer scale the
+    pipeline outputs have always used.
+    """
+    return round(fuzz.token_sort_ratio(s1, s2, processor=process_name))
+
 
 # Function to calculate similarity
 def calculate_similarity_vectorized(df: pd.DataFrame, cols: List[str], fixed_column: str) -> Tuple[pd.Series, pd.Series]:
@@ -26,7 +65,7 @@ def calculate_similarity_vectorized(df: pd.DataFrame, cols: List[str], fixed_col
             mask = s1.notna() & s2.notna()
             result = pd.Series(0, index=s1.index)
             if mask.any():
-                result[mask] = np.vectorize(fuzz.token_sort_ratio, otypes=[np.int64])(
+                result[mask] = np.vectorize(token_sort_ratio, otypes=[np.int64])(
                     s1[mask].astype(str), s2[mask].astype(str)
                 )
             return result
