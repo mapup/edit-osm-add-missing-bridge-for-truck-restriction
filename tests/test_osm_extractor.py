@@ -59,8 +59,9 @@ class TestPrepareBridgeData(unittest.TestCase):
 
 class TestProjectPointToLine(unittest.TestCase):
     def test_wrong_type_raises_type_error(self):
+        line = LineString([(0, 0), (1, 0)])
         with self.assertRaises(TypeError):
-            mod.project_point_to_line("not_a_point", LineString([(0, 0), (1, 0)]))
+            mod.project_point_to_line("not_a_point", line)
 
     def test_both_wrong_types_raises_type_error(self):
         with self.assertRaises(TypeError):
@@ -83,7 +84,8 @@ class TestProjectPointToLine(unittest.TestCase):
         line = LineString([(0, 0), (10, 0)])
         point = Point(5, 5)
         result = mod.project_point_to_line(point, line, max_distance=0.001)
-        assert result.x == 5.0 and result.y == 5.0
+        assert result.x == 5.0
+        assert result.y == 5.0
 
     def test_point_on_line_returns_same_location(self):
         line = LineString([(0, 0), (10, 0)])
@@ -156,9 +158,10 @@ class TestProcessAndMergeOsmData(unittest.TestCase):
         }, crs="EPSG:3857")
         try:
             final_df, point_geom = mod.process_and_merge_osm_data(osm_df, bridge_df, bridge_loc)
-            assert len(final_df) == 0
         except (ValueError, Exception):
             pass  # empty overlay may raise in some pandas versions
+        else:
+            assert len(final_df) == 0
 
 
 class TestLoadAndPrepareData(unittest.TestCase):

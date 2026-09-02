@@ -154,7 +154,7 @@ class TestRun(unittest.TestCase):
 
     def test_run_exception_propagates(self):
         with patch("pandas.read_csv", side_effect=Exception("disk error")):
-            with self.assertRaises(Exception):
+            with self.assertRaisesRegex(Exception, "disk error"):
                 mod.run("bridge.csv", "out.csv", "osm.csv")
 
 

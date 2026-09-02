@@ -144,7 +144,8 @@ class TestGroupAndAggregate(unittest.TestCase):
         df = self._make_df()
         result = mod.group_and_aggregate(df)
         road_names = result["RD_NAME_right"].iloc[0]
-        assert "Main St" in road_names and "Oak Ave" in road_names
+        assert "Main St" in road_names
+        assert "Oak Ave" in road_names
 
     def test_missing_columns_raises_grouping_error(self):
         df = pd.DataFrame({"col_a": [1, 2]})

@@ -53,13 +53,13 @@ def calculate_osm_similarity(name: str, target: str) -> float:
     try:
         return round(fuzz.token_sort_ratio(name, target, processor=process_name))
     except TypeError as e:
-        logger.error(f"TypeError in calculate_osm_similarity: {str(e)}", exc_info=True)
+        logger.exception(f"TypeError in calculate_osm_similarity: {str(e)}", exc_info=True)
         raise
     except ValueError as e:
-        logger.error(f"ValueError in calculate_osm_similarity: {str(e)}", exc_info=True)
+        logger.exception(f"ValueError in calculate_osm_similarity: {str(e)}", exc_info=True)
         raise
     except Exception as e:
-        logger.error(f"Unexpected error in calculate_osm_similarity: {str(e)}", exc_info=True)
+        logger.exception(f"Unexpected error in calculate_osm_similarity: {str(e)}", exc_info=True)
         raise
 
 
@@ -76,13 +76,13 @@ def read_geopackage_to_dataframe(filepath: str) -> gpd.GeoDataFrame:
     try:
         return gpd.read_file(filepath)
     except FileNotFoundError as e:
-        logger.error(f"FileNotFoundError: GeoPackage file not found at {filepath}: {str(e)}", exc_info=True)
+        logger.exception(f"FileNotFoundError: GeoPackage file not found at {filepath}: {str(e)}", exc_info=True)
         raise
     except PermissionError as e:
-        logger.error(f"PermissionError: Unable to access GeoPackage file at {filepath}: {str(e)}", exc_info=True)
+        logger.exception(f"PermissionError: Unable to access GeoPackage file at {filepath}: {str(e)}", exc_info=True)
         raise
     except Exception as e:
-        logger.error(f"Unexpected error while reading GeoPackage file at {filepath}: {str(e)}", exc_info=True)
+        logger.exception(f"Unexpected error while reading GeoPackage file at {filepath}: {str(e)}", exc_info=True)
         raise
 
 
@@ -104,10 +104,10 @@ def extract_coordinates(geom: object) -> Union[Tuple[float, float] , Tuple[None,
         else:
             return geom.x, geom.y
     except AttributeError as e:
-        logger.error(f"AttributeError in extract_coordinates: Geometry object lacks 'x' or 'y' attribute: {str(e)}", exc_info=True)
+        logger.exception(f"AttributeError in extract_coordinates: Geometry object lacks 'x' or 'y' attribute: {str(e)}", exc_info=True)
         raise
     except Exception as e:
-        logger.error(f"Unexpected error in extract_coordinates: {str(e)}", exc_info=True)
+        logger.exception(f"Unexpected error in extract_coordinates: {str(e)}", exc_info=True)
         raise
 
 def calculate_similarity_for_neighbouring_roads(
@@ -146,13 +146,13 @@ def calculate_similarity_for_neighbouring_roads(
         
         return merge_df
     except KeyError as e:
-        logger.error(f"KeyError in calculate_similarity_for_neighbouring_roads: {str(e)}", exc_info=True)
+        logger.exception(f"KeyError in calculate_similarity_for_neighbouring_roads: {str(e)}", exc_info=True)
         raise
     except ValueError as e:
-        logger.error(f"ValueError in calculate_similarity_for_neighbouring_roads: {str(e)}", exc_info=True)
+        logger.exception(f"ValueError in calculate_similarity_for_neighbouring_roads: {str(e)}", exc_info=True)
         raise
     except Exception as e:
-        logger.error(f"Unexpected error in calculate_similarity_for_neighbouring_roads: {str(e)}", exc_info=True)
+        logger.exception(f"Unexpected error in calculate_similarity_for_neighbouring_roads: {str(e)}", exc_info=True)
         raise
 
 def update_stats(stats: pd.DataFrame, description: str, count: int, stats_list: List[int]) -> Tuple[pd.DataFrame, List[int]]:
@@ -180,7 +180,7 @@ def update_stats(stats: pd.DataFrame, description: str, count: int, stats_list: 
         stats.loc[stats["Description"] == description, "bridges"] = count
         return stats, stats_list
     except Exception as e:
-        logger.error(f"Unexpected error in update_stats: {str(e)}", exc_info=True)
+        logger.exception(f"Unexpected error in update_stats: {str(e)}", exc_info=True)
         raise
 
 
@@ -236,10 +236,10 @@ def main():
                 curr_index=stats.loc[stats["Description"] == "Not editing: Unsnapped"].index.values[0]
                 stats_list=stats['bridges'].tolist()[:curr_index]
             except FileNotFoundError as e:
-                logger.error(f"FileNotFoundError: {str(e)}", exc_info=True)
+                logger.exception(f"FileNotFoundError: {str(e)}", exc_info=True)
                 raise
             except Exception as e:
-                logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+                logger.exception(f"Unexpected error: {str(e)}", exc_info=True)
                 raise
 
             #Not editing: Unsnapped
@@ -301,7 +301,7 @@ def main():
         merge_df.to_csv("merged-approaches-association-output.csv", index=False)
             
     except Exception as e:
-        logger.error(f"Unexpected error occurred: {str(e)}", exc_info=True)
+        logger.exception(f"Unexpected error occurred: {str(e)}", exc_info=True)
         raise 
 
 if __name__ == "__main__":

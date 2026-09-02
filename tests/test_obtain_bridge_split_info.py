@@ -87,8 +87,10 @@ class TestTransformResultPoints(unittest.TestCase):
             return pt
 
         fwd, bwd = mod._transform_result_points(None, None, fake_transform)
-        assert fwd.x == -1 and fwd.y == -1
-        assert bwd.x == -1 and bwd.y == -1
+        assert fwd.x == -1
+        assert fwd.y == -1
+        assert bwd.x == -1
+        assert bwd.y == -1
 
     def test_transforms_valid_points(self):
         transformed = Point(5, 6)

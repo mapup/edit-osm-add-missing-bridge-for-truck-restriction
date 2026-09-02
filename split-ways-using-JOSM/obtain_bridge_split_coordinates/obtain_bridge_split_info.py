@@ -27,7 +27,7 @@ def load_geojson(file_path):
             data = json.load(f)
         return data
     except Exception as e:
-        logging.error(f"Error loading GeoJSON file: {e}")
+        logging.exception(f"Error loading GeoJSON file: {e}")
         return None
 
 def load_csv(file_path):
@@ -51,9 +51,9 @@ def load_csv(file_path):
                         }
                     )
                 except Exception as e:
-                    logging.error(f"Error processing row {row_number} in CSV file: {e}")
+                    logging.exception(f"Error processing row {row_number} in CSV file: {e}")
     except Exception as e:
-        logging.error(f"Error loading CSV file: {e}")
+        logging.exception(f"Error loading CSV file: {e}")
     return bridge_data
 
 def find_nearest_point_on_line(line, point):
@@ -61,7 +61,7 @@ def find_nearest_point_on_line(line, point):
         nearest_geoms = nearest_points(line, point)
         return nearest_geoms[0]
     except Exception as e:
-        logging.error(f"Error finding nearest point on line: {e}")
+        logging.exception(f"Error finding nearest point on line: {e}")
         return None
 
 def find_way_id_for_point(point, all_lines_with_ids):
@@ -70,7 +70,7 @@ def find_way_id_for_point(point, all_lines_with_ids):
             if line.distance(point) < 1e-6:
                 return way_id
     except Exception as e:
-        logging.error(f"Error finding way ID for point: {e}")
+        logging.exception(f"Error finding way ID for point: {e}")
     return None
 
 def calculate_points_on_way(line, nearest_point, half_distance, all_lines_with_ids):
@@ -106,7 +106,7 @@ def calculate_points_on_way(line, nearest_point, half_distance, all_lines_with_i
 
         return forward_point, forward_way_id, forward_visited, backward_point, backward_way_id, backward_visited
     except Exception as e:
-        logging.error(f"Error calculating points on way: {e}")
+        logging.exception(f"Error calculating points on way: {e}")
         return None, None, [], None, None, []
 
 def _find_connected_lines(current_line, all_lines_with_ids, connection_point, visited):
@@ -161,7 +161,7 @@ def extend_along_connected_way(
         logging.warning(f"No connected line found at point {current_line_way_id}. Stopping.")
         return None, current_line_way_id, visited
     except Exception as e:
-        logging.error(f"Error extending along connected way: {e}")
+        logging.exception(f"Error extending along connected way: {e}")
         return None, None, visited
 
 def _transform_result_points(forward_point_utm, backward_point_utm, inverse_project):
@@ -254,7 +254,7 @@ def process_single_bridge(bridge, lines_utm_with_ids, project, inverse_project):
 
                 return result
     except Exception as e:
-        logging.error(f"Error processing bridge {bridge['osm_id']}: {e}")
+        logging.exception(f"Error processing bridge {bridge['osm_id']}: {e}")
     return None
 
 def process_bridge_data_parallel(bridge_data, lines_with_ids, project, inverse_project):
@@ -274,7 +274,7 @@ def process_bridge_data_parallel(bridge_data, lines_with_ids, project, inverse_p
         pool.join()
         return [result for result in results if result is not None]
     except Exception as e:
-        logging.error(f"Error processing bridge data in parallel: {e}")
+        logging.exception(f"Error processing bridge data in parallel: {e}")
         return []
 
 def main():
@@ -345,7 +345,7 @@ def main():
 
         logging.info("Processing completed successfully.")
     except Exception as e:
-        logging.error(f"Unexpected error: {e}")
+        logging.exception(f"Unexpected error: {e}")
 
 if __name__ == "__main__":
     main()

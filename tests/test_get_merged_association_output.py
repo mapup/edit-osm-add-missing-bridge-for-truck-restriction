@@ -30,11 +30,13 @@ class TestCalculateOsmSimilarity(unittest.TestCase):
 class TestExtractCoordinates(unittest.TestCase):
     def test_none_returns_none_none(self):
         x, y = mod.extract_coordinates(None)
-        assert x is None and y is None
+        assert x is None
+        assert y is None
 
     def test_nan_returns_none_none(self):
         x, y = mod.extract_coordinates(float("nan"))
-        assert x is None and y is None
+        assert x is None
+        assert y is None
 
     def test_valid_geometry(self):
         geom = MagicMock()
@@ -43,15 +45,17 @@ class TestExtractCoordinates(unittest.TestCase):
         geom.y = 20.0
         with patch("pandas.isnull", return_value=False):
             x, y = mod.extract_coordinates(geom)
-        assert x == 10.0 and y == 20.0
+        assert x == 10.0
+        assert y == 20.0
 
     def test_geometry_without_xy_raises(self):
         class BadGeom:
             pass  # no x/y attribute
 
+        bad_geom = BadGeom()
         with patch("pandas.isnull", return_value=False):
             with self.assertRaises(AttributeError):
-                mod.extract_coordinates(BadGeom())
+                mod.extract_coordinates(bad_geom)
 
 
 class TestUpdateStats(unittest.TestCase):
@@ -153,9 +157,10 @@ class TestExtractCoordinatesExceptions(unittest.TestCase):
             def y(self):
                 raise RuntimeError("corrupt geometry")
 
+        bad_geom = BadGeom()
         with patch("pandas.isnull", return_value=False):
             with self.assertRaises((RuntimeError, AttributeError)):
-                mod.extract_coordinates(BadGeom())
+                mod.extract_coordinates(bad_geom)
 
 
 class TestCalculateSimilarityForNeighbouringRoadsExceptions(unittest.TestCase):
@@ -254,13 +259,13 @@ class TestMain(unittest.TestCase):
 
     def test_main_raises_on_read_failure(self):
         with patch.object(mod, "read_geopackage_to_dataframe", side_effect=FileNotFoundError("no file")):
-            with self.assertRaises(Exception):
+            with self.assertRaises(FileNotFoundError):
                 mod.main()
 
     def test_main_raises_on_csv_read_failure(self):
         with patch.object(mod, "read_geopackage_to_dataframe", return_value=self._milepoint_gdf()), \
              patch("pandas.read_csv", side_effect=FileNotFoundError("missing csv")):
-            with self.assertRaises(Exception):
+            with self.assertRaises(FileNotFoundError):
                 mod.main()
 
 
