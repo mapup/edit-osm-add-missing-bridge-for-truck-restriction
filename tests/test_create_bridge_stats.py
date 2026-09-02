@@ -137,7 +137,7 @@ class TestCreateBridgeStatistics(unittest.TestCase):
 
     def test_raises_on_file_not_found(self):
         with patch("geopandas.read_file", side_effect=FileNotFoundError("missing")):
-            with self.assertRaises(Exception):
+            with self.assertRaises(FileNotFoundError):
                 mod.create_bridge_statistics(
                     bridge_edit_stats="stats.csv",
                     state="KY",

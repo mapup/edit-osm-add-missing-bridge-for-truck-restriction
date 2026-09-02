@@ -35,11 +35,13 @@ class TestExtractCoordinates(unittest.TestCase):
 
     def test_nan_input(self):
         lat, lon = mod.extract_coordinates(float("nan"))
-        assert lat is None and lon is None
+        assert lat is None
+        assert lon is None
 
     def test_none_like_nan(self):
         lat, lon = mod.extract_coordinates(pd.NA)
-        assert lat is None and lon is None
+        assert lat is None
+        assert lon is None
 
 
 class TestResolveLocationSingleOsm(unittest.TestCase):
@@ -51,7 +53,8 @@ class TestResolveLocationSingleOsm(unittest.TestCase):
         min_dist = self._make_df([])
         group = self._make_df([(10.0, 20.0, True)])
         long, lat = mod._resolve_location_single_osm(group, true_stream, min_dist)
-        assert long == 10.0 and lat == 20.0
+        assert long == 10.0
+        assert lat == 20.0
 
     def test_multiple_true_stream_with_min_dist(self):
         true_stream = pd.DataFrame({
@@ -62,7 +65,8 @@ class TestResolveLocationSingleOsm(unittest.TestCase):
         min_dist = true_stream[true_stream["Is_Min_Dist"]]
         group = true_stream.copy()
         long, lat = mod._resolve_location_single_osm(group, true_stream, min_dist)
-        assert long == 1.0 and lat == 3.0
+        assert long == 1.0
+        assert lat == 3.0
 
     def test_multiple_true_stream_without_min_dist_match(self):
         true_stream = pd.DataFrame({
@@ -73,21 +77,24 @@ class TestResolveLocationSingleOsm(unittest.TestCase):
         min_dist = pd.DataFrame(columns=["Long_intersection", "Lat_intersection", "Is_Min_Dist"])
         group = true_stream.copy()
         long, lat = mod._resolve_location_single_osm(group, true_stream, min_dist)
-        assert long == 1.0 and lat == 3.0
+        assert long == 1.0
+        assert lat == 3.0
 
     def test_empty_true_stream_uses_min_dist(self):
         true_stream = pd.DataFrame(columns=["Long_intersection", "Lat_intersection", "Is_Min_Dist"])
         min_dist = pd.DataFrame({"Long_intersection": [5.0], "Lat_intersection": [6.0], "Is_Min_Dist": [True]})
         group = min_dist.copy()
         long, lat = mod._resolve_location_single_osm(group, true_stream, min_dist)
-        assert long == 5.0 and lat == 6.0
+        assert long == 5.0
+        assert lat == 6.0
 
     def test_empty_true_stream_empty_min_dist_uses_group(self):
         true_stream = pd.DataFrame(columns=["Long_intersection", "Lat_intersection", "Is_Min_Dist"])
         min_dist = pd.DataFrame(columns=["Long_intersection", "Lat_intersection", "Is_Min_Dist"])
         group = pd.DataFrame({"Long_intersection": [7.0], "Lat_intersection": [8.0], "Is_Min_Dist": [False]})
         long, lat = mod._resolve_location_single_osm(group, true_stream, min_dist)
-        assert long == 7.0 and lat == 8.0
+        assert long == 7.0
+        assert lat == 8.0
 
 
 class TestResolveOsmForMultiple(unittest.TestCase):

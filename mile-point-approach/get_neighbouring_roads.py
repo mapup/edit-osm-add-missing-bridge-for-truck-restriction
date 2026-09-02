@@ -88,7 +88,7 @@ def validate_file_path(file_path: str) -> str:
             raise ValueError(f"File does not exist: {path}")
         return str(path)
     except Exception as e:
-        logger.error(f"Error validating file path {file_path}: {str(e)}")
+        logger.exception(f"Error validating file path {file_path}: {str(e)}")
         raise ValueError(f"Invalid file path: {file_path}") from e
     
 def read_geopackage(file_path: str) -> gpd.GeoDataFrame:
@@ -108,7 +108,7 @@ def read_geopackage(file_path: str) -> gpd.GeoDataFrame:
         file_path=validate_file_path(file_path)
         return gpd.read_file(file_path, engine="pyogrio", use_arrow=True)
     except Exception as e:
-        logger.error(f"Error reading file {file_path}: {str(e)}")
+        logger.exception(f"Error reading file {file_path}: {str(e)}")
         raise FileReadError(f"Failed to read GeoPackage: {file_path}") from e
 
 def transform_crs(gdf: gpd.GeoDataFrame, target_crs: CRS) -> gpd.GeoDataFrame:
@@ -130,7 +130,7 @@ def transform_crs(gdf: gpd.GeoDataFrame, target_crs: CRS) -> gpd.GeoDataFrame:
             return gdf.to_crs(epsg=target_crs.value.split(":")[1])
         return gdf
     except Exception as e:
-        logger.error(f"Error transforming CRS to {target_crs.value}: {str(e)}")
+        logger.exception(f"Error transforming CRS to {target_crs.value}: {str(e)}")
         raise CRSTransformError("Failed to transform CRS") from e
 
 
@@ -164,7 +164,7 @@ def create_buffer(gdf: gpd.GeoDataFrame, buffer_distance: BufferDistance) -> gpd
         buffered['geometry'] = gdf.buffer(distance)
         return buffered
     except Exception as e:
-        logger.error(f"Error creating buffer: {str(e)}")
+        logger.exception(f"Error creating buffer: {str(e)}")
         raise BufferCreationError("Failed to create buffer") from e
 
 def perform_spatial_join(left_gdf: gpd.GeoDataFrame, right_gdf: gpd.GeoDataFrame, 
@@ -199,7 +199,7 @@ def perform_spatial_join(left_gdf: gpd.GeoDataFrame, right_gdf: gpd.GeoDataFrame
         combined = pd.concat(results.values())
         return combined.drop_duplicates()
     except Exception as e:
-        logger.error(f"Error performing spatial join: {str(e)}")
+        logger.exception(f"Error performing spatial join: {str(e)}")
         raise SpatialJoinError("Failed to perform spatial join") from e
 
 def group_and_aggregate(df: pd.DataFrame) -> gpd.GeoDataFrame:
@@ -226,10 +226,10 @@ def group_and_aggregate(df: pd.DataFrame) -> gpd.GeoDataFrame:
 
         return gpd.GeoDataFrame(grouped, geometry='geometry', crs=df.crs)
     except KeyError as e:
-        logger.error(f"Grouping error: missing column {str(e)}")
+        logger.exception(f"Grouping error: missing column {str(e)}")
         raise GroupingError("Grouping failed due to missing column") from e
     except Exception as e:
-        logger.error(f"Unexpected error during grouping: {str(e)}")
+        logger.exception(f"Unexpected error during grouping: {str(e)}")
         raise GroupingError("Unexpected error during grouping") from e
 
 def save_geopackage(gdf: gpd.GeoDataFrame, file_path: str) -> None:
@@ -251,7 +251,7 @@ def save_geopackage(gdf: gpd.GeoDataFrame, file_path: str) -> None:
                 gdf.to_file(file_path, driver="GPKG")
             logger.info(f"Saved GeoPackage: {file_path}")
         except Exception as e:
-            logger.error(f"Error saving GeoPackage {file_path}: {str(e)}")
+            logger.exception(f"Error saving GeoPackage {file_path}: {str(e)}")
             raise GeoprocessingError(f"Failed to save GeoPackage: {file_path}") from e
 
 def save_csv(df: pd.DataFrame, file_path: str) -> None:
@@ -270,7 +270,7 @@ def save_csv(df: pd.DataFrame, file_path: str) -> None:
         df.to_csv(file_path, index=False)
         logger.info(f"Saved CSV: {file_path}")
     except Exception as e:
-        logger.error(f"Error saving CSV {file_path}: {str(e)}")
+        logger.exception(f"Error saving CSV {file_path}: {str(e)}")
         raise GeoprocessingError(f"Failed to save CSV: {file_path}") from e
 
 def load_and_transform_data() -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
@@ -300,7 +300,7 @@ def load_and_transform_data() -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
 
         return osm_road_points, state_road
     except (FileReadError, CRSTransformError) as e:
-        logger.error(f"Error loading and transforming data: {str(e)}")
+        logger.exception(f"Error loading and transforming data: {str(e)}")
         raise DataLoadError("Failed to load and transform data") from e
 
 def prepare_final_output(grouped_gpd: gpd.GeoDataFrame, osm_road_points: gpd.GeoDataFrame) -> pd.DataFrame:
@@ -331,7 +331,7 @@ def prepare_final_output(grouped_gpd: gpd.GeoDataFrame, osm_road_points: gpd.Geo
         
         return final_df
     except (GroupingError, ValueError) as e:
-        logger.error(f"Error preparing final output: {str(e)}")
+        logger.exception(f"Error preparing final output: {str(e)}")
         raise OutputPreparationError("Failed to prepare final output") from e
 
 
@@ -378,23 +378,23 @@ def main() -> None:
 
 
     except FileReadError as e:
-        logger.error(f"File read error: {str(e)}")
+        logger.exception(f"File read error: {str(e)}")
     except CRSTransformError as e:
-        logger.error(f"CRS transformation error: {str(e)}")
+        logger.exception(f"CRS transformation error: {str(e)}")
     except BufferCreationError as e:
-        logger.error(f"Buffer creation error: {str(e)}")
+        logger.exception(f"Buffer creation error: {str(e)}")
     except SpatialJoinError as e:
-        logger.error(f"Spatial join error: {str(e)}")
+        logger.exception(f"Spatial join error: {str(e)}")
     except GroupingError as e:
-        logger.error(f"Grouping error: {str(e)}")
+        logger.exception(f"Grouping error: {str(e)}")
     except DataLoadError as e:
-        logger.error(f"Data Loading error: {str(e)}")
+        logger.exception(f"Data Loading error: {str(e)}")
     except OutputPreparationError as e:
-        logger.error(f"Output preparation error: {str(e)}")
+        logger.exception(f"Output preparation error: {str(e)}")
     except GeoprocessingError as e:
-        logger.error(f"Geoprocessing error: {str(e)}")
+        logger.exception(f"Geoprocessing error: {str(e)}")
     except Exception as e:
-        logger.error(f"An unexpected error occurred: {str(e)}")
+        logger.exception(f"An unexpected error occurred: {str(e)}")
 
 if __name__ == "__main__":
     main()

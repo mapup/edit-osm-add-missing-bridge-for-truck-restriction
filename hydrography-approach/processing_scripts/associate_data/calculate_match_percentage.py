@@ -70,13 +70,13 @@ def calculate_similarity_vectorized(df: pd.DataFrame, cols: List[str], fixed_col
                 )
             return result
         except ValueError as e:
-            logger.error(f"ValueError in vectorized_fuzz: {str(e)}", exc_info=True)
+            logger.exception(f"ValueError in vectorized_fuzz: {str(e)}", exc_info=True)
             raise 
         except TypeError as e:
-            logger.error(f"TypeError in vectorized_fuzz: {str(e)}", exc_info=True)
+            logger.exception(f"TypeError in vectorized_fuzz: {str(e)}", exc_info=True)
             raise 
         except Exception as e:
-            logger.error(f"Unexpected error in vectorized_fuzz: {str(e)}", exc_info=True)
+            logger.exception(f"Unexpected error in vectorized_fuzz: {str(e)}", exc_info=True)
             raise 
 
     try:
@@ -96,13 +96,13 @@ def calculate_similarity_vectorized(df: pd.DataFrame, cols: List[str], fixed_col
         
         return max_scores, max_cols
     except KeyError as e:
-        logger.error(f"KeyError in calculate_similarity_vectorized: {str(e)}", exc_info=True)
+        logger.exception(f"KeyError in calculate_similarity_vectorized: {str(e)}", exc_info=True)
         raise 
     except ValueError as e:
-        logger.error(f"ValueError in calculate_similarity_vectorized: {str(e)}", exc_info=True)
+        logger.exception(f"ValueError in calculate_similarity_vectorized: {str(e)}", exc_info=True)
         raise 
     except Exception as e:
-        logger.error(f"Unexpected error in calculate_similarity_vectorized: {str(e)}", exc_info=True)
+        logger.exception(f"Unexpected error in calculate_similarity_vectorized: {str(e)}", exc_info=True)
         raise 
 
 
@@ -125,13 +125,13 @@ def read_exploded_osm_data_csv(exploded_osm_data_csv: str, osm_cols_for_road_nam
             series_list.append(series)
             available_osm_road_names.append(col)
         except pd.errors.EmptyDataError as e:
-            logger.error(f"Empty data error when reading CSV: {e}", exc_info=True)
+            logger.exception(f"Empty data error when reading CSV: {e}", exc_info=True)
             raise
         except ValueError as e:
             logger.warning(f"Column {col} not found in CSV: {e}")
             raise
         except Exception as e:
-            logger.error(f"Unexpected error when reading CSV: {e}", exc_info=True)
+            logger.exception(f"Unexpected error when reading CSV: {e}", exc_info=True)
             raise
     
     
@@ -139,10 +139,10 @@ def read_exploded_osm_data_csv(exploded_osm_data_csv: str, osm_cols_for_road_nam
         exploded_osm_data_df=pd.concat(series_list,axis=1)
         return exploded_osm_data_df, available_osm_road_names
     except ValueError as e:
-        logger.error(f"ValueError when concatenating series: {e}", exc_info=True)
+        logger.exception(f"ValueError when concatenating series: {e}", exc_info=True)
         raise
     except Exception as e:
-        logger.error(f"Unexpected error when concatenating series: {e}", exc_info=True)
+        logger.exception(f"Unexpected error when concatenating series: {e}", exc_info=True)
         raise
     
 
@@ -208,5 +208,5 @@ def run(bridge_with_proj_points, bridge_match_percentage,exploded_osm_data_csv):
         df.to_csv(bridge_match_percentage, index=False)
     
     except Exception as e:
-        logger.error(f"Error in run function: {str(e)}", exc_info=True)
+        logger.exception(f"Error in run function: {str(e)}", exc_info=True)
         raise

@@ -28,13 +28,13 @@ def get_gpkg_length(gpkg_file: str) -> int:
         gdf = gpd.read_file(gpkg_file)
         return len(gdf)
     except FileNotFoundError as e:
-        logger.error(f"File {gpkg_file} does not exist: {str(e)}", exc_info=True)
+        logger.exception(f"File {gpkg_file} does not exist: {str(e)}", exc_info=True)
         raise FileNotFoundError(f"File {gpkg_file} does not exist.")
     except ValueError as e:
-        logger.error(f"{gpkg_file} is not a valid GeoPackage file: {str(e)}", exc_info=True)
+        logger.exception(f"{gpkg_file} is not a valid GeoPackage file: {str(e)}", exc_info=True)
         raise ValueError(f"{gpkg_file} is not a valid GeoPackage file.")
     except Exception as e:
-        logger.error(f"Unexpected error while reading GeoPackage file {gpkg_file}: {str(e)}", exc_info=True)
+        logger.exception(f"Unexpected error while reading GeoPackage file {gpkg_file}: {str(e)}", exc_info=True)
         raise
     
 
@@ -56,13 +56,13 @@ def get_csv_length(csv_file: str) -> int:
         df_csv = pd.read_csv(csv_file)
         return len(df_csv)
     except FileNotFoundError as e:
-        logger.error(f"File {csv_file} does not exist: {str(e)}", exc_info=True)
+        logger.exception(f"File {csv_file} does not exist: {str(e)}", exc_info=True)
         raise FileNotFoundError(f"File {csv_file} does not exist.")
     except ValueError as e:
-        logger.error(f"{csv_file} is not a valid CSV file: {str(e)}", exc_info=True)
+        logger.exception(f"{csv_file} is not a valid CSV file: {str(e)}", exc_info=True)
         raise ValueError(f"{csv_file} is not a valid CSV file.")
     except Exception as e:
-        logger.error(f"Unexpected error while reading CSV file {csv_file}: {str(e)}", exc_info=True)
+        logger.exception(f"Unexpected error while reading CSV file {csv_file}: {str(e)}", exc_info=True)
         raise
     
 
@@ -91,7 +91,7 @@ def update_stats(stats: pd.DataFrame, description: str, count: int, stats_list: 
         stats.loc[stats["Description"] == description, "bridges"] = count
         return stats, stats_list
     except Exception as e:
-        logger.error(f"Unexpected error in update_stats: {str(e)}", exc_info=True)
+        logger.exception(f"Unexpected error in update_stats: {str(e)}", exc_info=True)
         raise
 
 def calculate_and_update_stats(stats: pd.DataFrame, description: str, base_value: int, stats_list: List[int], length_function, *args) -> Tuple[pd.DataFrame, List[int]]:
@@ -113,7 +113,7 @@ def calculate_and_update_stats(stats: pd.DataFrame, description: str, base_value
         value = base_value - sum(stats_list[1:]) - length_function(*args)
         return update_stats(stats, description, value, stats_list)
     except Exception as e:
-        logger.error(f"Error calculating and updating stats for {description}: {str(e)}", exc_info=True)
+        logger.exception(f"Error calculating and updating stats for {description}: {str(e)}", exc_info=True)
         raise
 
 def create_bridge_statistics(
@@ -222,6 +222,6 @@ def create_bridge_statistics(
         stats.to_csv(bridge_edit_stats, index=False)
     
     except Exception as e:
-        logger.error(f"Unexpected error occurred: {str(e)}", exc_info=True)
+        logger.exception(f"Unexpected error occurred: {str(e)}", exc_info=True)
         raise
 
